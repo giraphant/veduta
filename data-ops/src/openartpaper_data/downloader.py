@@ -62,15 +62,19 @@ def download_url(url: str, destination: Path, timeout: float = 60.0) -> None:
 
 def download_first_working(candidates: list[str], destination: Path, delay_seconds: float) -> dict[str, object]:
     if choose_download_state(destination) == "skip":
-        width, height = image_dimensions(destination)
-        return {
-            "status": "skipped",
-            "url": None,
-            "width": width,
-            "height": height,
-            "bytes": destination.stat().st_size,
-            "sha256": sha256_file(destination),
-        }
+        try:
+            width, height = image_dimensions(destination)
+            return {
+                "status": "skipped",
+                "url": None,
+                "width": width,
+                "height": height,
+                "bytes": destination.stat().st_size,
+                "sha256": sha256_file(destination),
+            }
+        except (OSError, ValueError, subprocess.CalledProcessError):
+            if destination.exists():
+                destination.unlink()
 
     errors: list[str] = []
     for url in candidates:
