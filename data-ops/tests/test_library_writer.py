@@ -1,7 +1,9 @@
 import json
 from pathlib import Path
 
-from openartpaper_data.library_writer import write_metadata_library
+import pytest
+
+from openartpaper_data.library_writer import write_json, write_metadata_library
 from openartpaper_data.models import SourceArtwork, SourceCollection, SourceLibrary
 
 
@@ -51,3 +53,20 @@ def test_write_metadata_library_creates_catalog_and_collection_manifest(tmp_path
         "https://lh6.ggpht.com/example=s5120",
         "https://lh6.ggpht.com/example=s4096",
     ]
+
+
+def test_write_json_leaves_existing_file_intact_if_replace_fails(tmp_path, monkeypatch):
+    path = tmp_path / "nested" / "value.json"
+    path.parent.mkdir()
+    original = '{"original": true}\n'
+    path.write_text(original, encoding="utf-8")
+
+    def fail_replace(self, target):
+        raise RuntimeError("replace interrupted")
+
+    monkeypatch.setattr(Path, "replace", fail_replace)
+
+    with pytest.raises(RuntimeError, match="replace interrupted"):
+        write_json(path, {"updated": True})
+
+    assert path.read_text(encoding="utf-8") == original

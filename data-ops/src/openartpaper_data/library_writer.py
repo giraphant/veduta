@@ -1,4 +1,5 @@
 import json
+import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -14,7 +15,26 @@ def candidate_image_urls(image_base: str) -> list[str]:
 
 def write_json(path: Path, value: object) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(value, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    json_text = json.dumps(value, ensure_ascii=False, indent=2) + "\n"
+    temp_path: Path | None = None
+
+    try:
+        with tempfile.NamedTemporaryFile(
+            "w",
+            encoding="utf-8",
+            dir=path.parent,
+            prefix=f".{path.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as temp_file:
+            temp_path = Path(temp_file.name)
+            temp_file.write(json_text)
+
+        temp_path.replace(path)
+    except Exception:
+        if temp_path is not None:
+            temp_path.unlink(missing_ok=True)
+        raise
 
 
 def now_iso() -> str:
