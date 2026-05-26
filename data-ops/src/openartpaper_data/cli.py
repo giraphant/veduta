@@ -6,6 +6,7 @@ from pathlib import Path
 
 from openartpaper_data.artpaper_import import import_artpaper_bundle
 from openartpaper_data.downloader import download_first_working
+from openartpaper_data.installed_packs import default_artpaper_image_root, import_installed_pack_images
 from openartpaper_data.library_writer import update_wallpaper_metadata, write_metadata_library
 
 
@@ -85,6 +86,21 @@ def download(args: argparse.Namespace) -> int:
     return 1 if failures > 0 else 0
 
 
+def import_installed_packs(args: argparse.Namespace) -> int:
+    summary = import_installed_pack_images(
+        library_root=Path(args.library_root),
+        artpaper_image_root=Path(args.artpaper_image_root),
+        quality=str(args.quality),
+        collection_id=args.collection,
+    )
+    print(f"Installed pack import complete: {summary.copied_count} copied, {summary.missing_count} missing")
+    for missing in summary.missing[:20]:
+        print(f"missing: {missing.collection_id}/{missing.artwork_id}: {missing.source_path}", file=sys.stderr)
+    if summary.missing_count > 20:
+        print(f"missing: ... {summary.missing_count - 20} more", file=sys.stderr)
+    return 1 if summary.copied_count == 0 or summary.missing_count > 0 else 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="openartpaper-data")
     subcommands = parser.add_subparsers(dest="command", required=True)
@@ -100,6 +116,13 @@ def build_parser() -> argparse.ArgumentParser:
     download_parser.add_argument("--all", action="store_true")
     download_parser.add_argument("--delay", type=float, default=1.0)
     download_parser.set_defaults(func=download)
+
+    import_installed_parser = subcommands.add_parser("import-installed-packs")
+    import_installed_parser.add_argument("--library-root", default=str(default_library_root()))
+    import_installed_parser.add_argument("--artpaper-image-root", default=str(default_artpaper_image_root()))
+    import_installed_parser.add_argument("--quality", choices=["5k", "hd", "regular"], default="5k")
+    import_installed_parser.add_argument("--collection")
+    import_installed_parser.set_defaults(func=import_installed_packs)
 
     return parser
 
