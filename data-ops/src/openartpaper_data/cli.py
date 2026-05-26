@@ -46,6 +46,7 @@ def download(args: argparse.Namespace) -> int:
     library_root = Path(args.library_root).expanduser()
     catalog = load_catalog(library_root)
     failures_path = library_root / "failures.jsonl"
+    failures_path.unlink(missing_ok=True)
     successes = 0
     failures = 0
 
@@ -81,7 +82,7 @@ def download(args: argparse.Namespace) -> int:
             time.sleep(float(args.delay))
 
     print(f"Download pass complete: {successes} successes, {failures} failures")
-    return 1 if failures and successes == 0 else 0
+    return 1 if failures > 0 else 0
 
 
 def build_parser() -> argparse.ArgumentParser:
