@@ -37,24 +37,42 @@ public struct CollectionSummary: Decodable, Sendable, Equatable {
 }
 
 public struct CollectionManifest: Decodable, Sendable, Equatable {
+    public let schemaVersion: Int
     public let id: String
     public let title: String
     public let shortName: String
-    public let sourcePackId: String
+    public let generatedAt: String
+    public let source: CollectionSource
     public let artworks: [Artwork]
 
     public init(
+        schemaVersion: Int,
         id: String,
         title: String,
         shortName: String,
-        sourcePackId: String,
+        generatedAt: String,
+        source: CollectionSource,
         artworks: [Artwork]
     ) {
+        self.schemaVersion = schemaVersion
         self.id = id
         self.title = title
         self.shortName = shortName
-        self.sourcePackId = sourcePackId
+        self.generatedAt = generatedAt
+        self.source = source
         self.artworks = artworks
+    }
+}
+
+public struct CollectionSource: Decodable, Sendable, Equatable {
+    public let type: String
+    public let packId: String
+    public let reportedSizesMb: [String: Int]
+
+    public init(type: String, packId: String, reportedSizesMb: [String: Int]) {
+        self.type = type
+        self.packId = packId
+        self.reportedSizesMb = reportedSizesMb
     }
 }
 
@@ -87,68 +105,63 @@ public struct Artwork: Decodable, Sendable, Equatable {
 }
 
 public struct ArtworkSources: Decodable, Sendable, Equatable {
-    public let primary: String
-    public let metObjectId: String?
-    public let chicagoArtworkId: String?
-    public let rijksmuseumObjectNumber: String?
-    public let wikidataId: String?
+    public let canonicalPage: String
+    public let artistPage: String?
+    public let upstreamImageBase: String?
 
     public init(
-        primary: String,
-        metObjectId: String? = nil,
-        chicagoArtworkId: String? = nil,
-        rijksmuseumObjectNumber: String? = nil,
-        wikidataId: String? = nil
+        canonicalPage: String,
+        artistPage: String? = nil,
+        upstreamImageBase: String? = nil
     ) {
-        self.primary = primary
-        self.metObjectId = metObjectId
-        self.chicagoArtworkId = chicagoArtworkId
-        self.rijksmuseumObjectNumber = rijksmuseumObjectNumber
-        self.wikidataId = wikidataId
+        self.canonicalPage = canonicalPage
+        self.artistPage = artistPage
+        self.upstreamImageBase = upstreamImageBase
     }
 }
 
 public struct ArtworkRights: Decodable, Sendable, Equatable {
-    public let license: String
+    public let work: String
+    public let reproduction: String
     public let creditLine: String?
-    public let isPublicDomain: Bool?
 
-    public init(license: String, creditLine: String? = nil, isPublicDomain: Bool? = nil) {
-        self.license = license
+    public init(work: String, reproduction: String, creditLine: String? = nil) {
+        self.work = work
+        self.reproduction = reproduction
         self.creditLine = creditLine
-        self.isPublicDomain = isPublicDomain
     }
 }
 
 public struct ArtworkImages: Decodable, Sendable, Equatable {
     public let wallpaper: WallpaperImage
-    public let fallbackUrls: [String]
 
-    public init(wallpaper: WallpaperImage, fallbackUrls: [String]) {
+    public init(wallpaper: WallpaperImage) {
         self.wallpaper = wallpaper
-        self.fallbackUrls = fallbackUrls
     }
 }
 
 public struct WallpaperImage: Decodable, Sendable, Equatable {
     public let localPath: String
+    public let fallbackUrls: [String]
     public let width: Int?
     public let height: Int?
     public let bytes: Int?
     public let sha256: String?
     public let downloadedFrom: String?
-    public let importedFromArtPaperPack: Bool?
+    public let importedFromArtPaperPack: String?
 
     public init(
         localPath: String,
+        fallbackUrls: [String],
         width: Int? = nil,
         height: Int? = nil,
         bytes: Int? = nil,
         sha256: String? = nil,
         downloadedFrom: String? = nil,
-        importedFromArtPaperPack: Bool? = nil
+        importedFromArtPaperPack: String? = nil
     ) {
         self.localPath = localPath
+        self.fallbackUrls = fallbackUrls
         self.width = width
         self.height = height
         self.bytes = bytes
