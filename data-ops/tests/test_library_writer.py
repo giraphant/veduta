@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from openartpaper_data.library_writer import write_json, write_metadata_library
+from openartpaper_data.library_writer import update_wallpaper_metadata, write_json, write_metadata_library
 from openartpaper_data.models import SourceArtwork, SourceCollection, SourceLibrary
 
 
@@ -70,3 +70,24 @@ def test_write_json_leaves_existing_file_intact_if_replace_fails(tmp_path, monke
         write_json(path, {"updated": True})
 
     assert path.read_text(encoding="utf-8") == original
+
+
+def test_update_wallpaper_metadata_updates_matching_artwork(tmp_path):
+    write_metadata_library(sample_library(), tmp_path)
+    manifest = tmp_path / "collections" / "essentials.json"
+
+    update_wallpaper_metadata(manifest, "artist-title", {
+        "width": 6000,
+        "height": 4000,
+        "bytes": 123,
+        "sha256": "abc",
+        "downloadedFrom": "https://lh6.ggpht.com/example=s0",
+    })
+
+    collection = json.loads(manifest.read_text(encoding="utf-8"))
+    wallpaper = collection["artworks"][0]["images"]["wallpaper"]
+    assert wallpaper["width"] == 6000
+    assert wallpaper["height"] == 4000
+    assert wallpaper["bytes"] == 123
+    assert wallpaper["sha256"] == "abc"
+    assert wallpaper["downloadedFrom"] == "https://lh6.ggpht.com/example=s0"

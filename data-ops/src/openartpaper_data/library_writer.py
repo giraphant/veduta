@@ -106,3 +106,16 @@ def write_metadata_library(library: SourceLibrary, library_root: Path) -> None:
         "generatedAt": generated_at,
         "collections": collection_summaries,
     })
+
+
+def update_wallpaper_metadata(collection_manifest_path: Path, artwork_id: str, metadata: dict[str, object]) -> None:
+    collection = json.loads(collection_manifest_path.read_text(encoding="utf-8"))
+    updated = False
+    for artwork in collection["artworks"]:
+        if artwork["id"] == artwork_id:
+            artwork["images"]["wallpaper"].update(metadata)
+            updated = True
+            break
+    if not updated:
+        raise KeyError(f"Artwork {artwork_id} not found in {collection_manifest_path}")
+    write_json(collection_manifest_path, collection)
