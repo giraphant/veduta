@@ -4,7 +4,11 @@ from pathlib import Path
 from openartpaper_data import cli
 
 
-def write_library(root: Path, artwork_ids: list[str]) -> None:
+def write_library(
+    root: Path,
+    artwork_ids: list[str],
+    fallback_url_template: str = "https://example.com/{artwork_id}=s0",
+) -> None:
     (root / "collections").mkdir(parents=True)
     (root / "catalog.json").write_text(json.dumps({
         "collections": [{
@@ -20,7 +24,7 @@ def write_library(root: Path, artwork_ids: list[str]) -> None:
                 "images": {
                     "wallpaper": {
                         "localPath": f"images/essentials/{artwork_id}.jpg",
-                        "fallbackUrls": [f"https://example.com/{artwork_id}=s0"],
+                        "fallbackUrls": [fallback_url_template.format(artwork_id=artwork_id)],
                     },
                 },
             }
@@ -93,3 +97,20 @@ def test_download_clears_stale_failures_when_run_has_no_failures(tmp_path, monke
 
     assert result == 0
     assert not failures_path.exists()
+
+
+def test_download_rejects_non_http_fallbacks_before_attempting_download(tmp_path, monkeypatch, capsys):
+    write_library(tmp_path, ["local-filename"], fallback_url_template="0.jpg=s0")
+
+    def fake_download(urls, destination, delay):
+        raise AssertionError("download should not be attempted")
+
+    monkeypatch.setattr(cli, "download_first_working", fake_download)
+
+    result = cli.main(["download", "--library-root", str(tmp_path), "--collection", "essentials", "--delay", "0"])
+
+    captured = capsys.readouterr()
+    assert result == 1
+    assert "Cannot download collection essentials" in captured.err
+    assert "local-filename" in captured.err
+    assert not (tmp_path / "failures.jsonl").exists()

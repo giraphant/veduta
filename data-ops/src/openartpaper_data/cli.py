@@ -3,6 +3,7 @@ import json
 import sys
 import time
 from pathlib import Path
+from urllib.parse import urlparse
 
 from openartpaper_data.artpaper_import import import_artpaper_bundle
 from openartpaper_data.downloader import download_first_working
@@ -43,6 +44,20 @@ def selected_collections(catalog: dict[str, object], collection_id: str | None, 
     return matches
 
 
+def is_http_url(value: object) -> bool:
+    return isinstance(value, str) and urlparse(value).scheme in {"http", "https"}
+
+
+def unsupported_download_artworks(collection: dict[str, object]) -> list[str]:
+    unsupported = []
+    for artwork in collection["artworks"]:
+        wallpaper = artwork["images"]["wallpaper"]
+        fallback_urls = wallpaper["fallbackUrls"]
+        if not fallback_urls or any(not is_http_url(url) for url in fallback_urls):
+            unsupported.append(str(artwork["id"]))
+    return unsupported
+
+
 def download(args: argparse.Namespace) -> int:
     library_root = Path(args.library_root).expanduser()
     catalog = load_catalog(library_root)
@@ -53,6 +68,17 @@ def download(args: argparse.Namespace) -> int:
 
     for collection_summary in selected_collections(catalog, args.collection, args.all):
         collection = load_collection(library_root, str(collection_summary["manifest"]))
+        unsupported = unsupported_download_artworks(collection)
+        if unsupported:
+            sample = unsupported[:5]
+            print(
+                f"Cannot download collection {collection['id']}: {len(unsupported)} artwork(s) have non-HTTP fallback URLs "
+                f"(e.g. {', '.join(sample)}). Use import-installed-packs or revise the acquisition strategy.",
+                file=sys.stderr,
+            )
+            failures += len(unsupported)
+            continue
+
         manifest_path = library_root / str(collection_summary["manifest"])
         for artwork in collection["artworks"]:
             wallpaper = artwork["images"]["wallpaper"]

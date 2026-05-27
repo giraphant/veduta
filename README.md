@@ -55,7 +55,7 @@ Do not use this yet. Collections 7-15 currently reference local package filename
 make run-app
 ```
 
-Runs the Swift app once the minimal macOS app tasks are implemented.
+Runs the minimal menu-bar app that rotates wallpapers from the local library.
 
 ## Current data-source notes
 
