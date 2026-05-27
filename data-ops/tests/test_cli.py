@@ -114,3 +114,42 @@ def test_download_rejects_non_http_fallbacks_before_attempting_download(tmp_path
     assert "Cannot download collection essentials" in captured.err
     assert "local-filename" in captured.err
     assert not (tmp_path / "failures.jsonl").exists()
+
+
+def test_download_all_preflights_every_collection_before_downloading(tmp_path, monkeypatch):
+    write_library(tmp_path, ["success"])
+    catalog_path = tmp_path / "catalog.json"
+    catalog = json.loads(catalog_path.read_text(encoding="utf-8"))
+    catalog["collections"].append({"id": "local-pack", "manifest": "collections/local-pack.json"})
+    catalog_path.write_text(json.dumps(catalog), encoding="utf-8")
+    (tmp_path / "collections" / "local-pack.json").write_text(json.dumps({
+        "id": "local-pack",
+        "artworks": [{
+            "id": "local-filename",
+            "images": {
+                "wallpaper": {
+                    "localPath": "images/local-pack/local-filename.jpg",
+                    "fallbackUrls": ["0.jpg=s0"],
+                },
+            },
+        }],
+    }), encoding="utf-8")
+    calls = []
+
+    def fake_download(urls, destination, delay):
+        calls.append(destination)
+        return {
+            "status": "downloaded",
+            "width": 6000,
+            "height": 4000,
+            "bytes": 123,
+            "sha256": "abc",
+            "url": urls[0],
+        }
+
+    monkeypatch.setattr(cli, "download_first_working", fake_download)
+
+    result = cli.main(["download", "--library-root", str(tmp_path), "--all", "--delay", "0"])
+
+    assert result == 1
+    assert calls == []

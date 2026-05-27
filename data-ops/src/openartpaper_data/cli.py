@@ -66,7 +66,9 @@ def download(args: argparse.Namespace) -> int:
     successes = 0
     failures = 0
 
+    selected = []
     for collection_summary in selected_collections(catalog, args.collection, args.all):
+        manifest_path = library_root / str(collection_summary["manifest"])
         collection = load_collection(library_root, str(collection_summary["manifest"]))
         unsupported = unsupported_download_artworks(collection)
         if unsupported:
@@ -77,9 +79,14 @@ def download(args: argparse.Namespace) -> int:
                 file=sys.stderr,
             )
             failures += len(unsupported)
-            continue
+        else:
+            selected.append((collection, manifest_path))
 
-        manifest_path = library_root / str(collection_summary["manifest"])
+    if failures:
+        print(f"Download pass complete: 0 successes, {failures} failures")
+        return 1
+
+    for collection, manifest_path in selected:
         for artwork in collection["artworks"]:
             wallpaper = artwork["images"]["wallpaper"]
             destination = library_root / str(wallpaper["localPath"])
