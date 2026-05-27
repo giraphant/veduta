@@ -12,7 +12,7 @@ public struct CollectionSummary: Decodable, Sendable, Equatable {
     public let id: String
     public let title: String
     public let shortName: String
-    public let sourcePackId: String
+    public let sourcePackId: Int
     public let artworkCount: Int
     public let expectedArtworkCount: Int
     public let manifest: String
@@ -21,7 +21,7 @@ public struct CollectionSummary: Decodable, Sendable, Equatable {
         id: String,
         title: String,
         shortName: String,
-        sourcePackId: String,
+        sourcePackId: Int,
         artworkCount: Int,
         expectedArtworkCount: Int,
         manifest: String
@@ -66,10 +66,10 @@ public struct CollectionManifest: Decodable, Sendable, Equatable {
 
 public struct CollectionSource: Decodable, Sendable, Equatable {
     public let type: String
-    public let packId: String
+    public let packId: Int
     public let reportedSizesMb: [String: Int]
 
-    public init(type: String, packId: String, reportedSizesMb: [String: Int]) {
+    public init(type: String, packId: Int, reportedSizesMb: [String: Int]) {
         self.type = type
         self.packId = packId
         self.reportedSizesMb = reportedSizesMb

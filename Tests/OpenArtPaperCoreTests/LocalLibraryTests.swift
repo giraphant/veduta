@@ -26,7 +26,7 @@ final class LocalLibraryTests: XCTestCase {
         XCTAssertEqual(summary.id, "essentials-5k")
         XCTAssertEqual(summary.title, "Essentials 5K")
         XCTAssertEqual(summary.shortName, "Essentials")
-        XCTAssertEqual(summary.sourcePackId, "artpaper-essentials")
+        XCTAssertEqual(summary.sourcePackId, 0)
         XCTAssertEqual(summary.artworkCount, 1)
         XCTAssertEqual(summary.expectedArtworkCount, 5000)
         XCTAssertEqual(summary.manifest, "collections/essentials.json")
@@ -38,7 +38,7 @@ final class LocalLibraryTests: XCTestCase {
         XCTAssertEqual(manifest.shortName, "Essentials")
         XCTAssertEqual(manifest.generatedAt, "2026-05-26T12:00:00Z")
         XCTAssertEqual(manifest.source.type, "artpaper-bundle")
-        XCTAssertEqual(manifest.source.packId, "artpaper-essentials")
+        XCTAssertEqual(manifest.source.packId, 0)
         XCTAssertEqual(manifest.source.reportedSizesMb, ["regular": 0, "hd": 332, "ultrahd": 945])
         XCTAssertEqual(manifest.artworks.count, 1)
 
@@ -112,7 +112,7 @@ final class LocalLibraryTests: XCTestCase {
               "id": "essentials-5k",
               "title": "Essentials 5K",
               "shortName": "Essentials",
-              "sourcePackId": "artpaper-essentials",
+              "sourcePackId": 0,
               "artworkCount": \(artworkCount),
               "expectedArtworkCount": 5000,
               "manifest": "collections/essentials.json"
@@ -134,7 +134,7 @@ final class LocalLibraryTests: XCTestCase {
           "generatedAt": "2026-05-26T12:00:00Z",
           "source": {
             "type": "artpaper-bundle",
-            "packId": "artpaper-essentials",
+            "packId": 0,
             "reportedSizesMb": {
               "regular": 0,
               "hd": 332,
