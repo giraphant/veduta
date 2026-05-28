@@ -22,11 +22,31 @@ public final class LocalLibrary {
         root.appendingPathComponent(artwork.images.wallpaper.localPath)
     }
 
-    public func loadAllDownloadedArtworks() throws -> [(Artwork, URL)] {
+    public func loadDownloadedCollections() throws -> [CollectionSummary] {
+        let catalog = try loadCatalog()
+        var downloadedCollections: [CollectionSummary] = []
+
+        for summary in catalog.collections {
+            let collection = try loadCollection(summary)
+            if collection.artworks.contains(where: { artwork in
+                FileManager.default.fileExists(atPath: wallpaperURL(for: artwork).path)
+            }) {
+                downloadedCollections.append(summary)
+            }
+        }
+
+        return downloadedCollections
+    }
+
+    public func loadDownloadedArtworks(collectionIDs: Set<String>? = nil) throws -> [(Artwork, URL)] {
         let catalog = try loadCatalog()
         var downloadedArtworks: [(Artwork, URL)] = []
 
         for summary in catalog.collections {
+            if let collectionIDs, !collectionIDs.contains(summary.id) {
+                continue
+            }
+
             let collection = try loadCollection(summary)
             for artwork in collection.artworks {
                 let url = wallpaperURL(for: artwork)
@@ -37,6 +57,10 @@ public final class LocalLibrary {
         }
 
         return downloadedArtworks
+    }
+
+    public func loadAllDownloadedArtworks() throws -> [(Artwork, URL)] {
+        try loadDownloadedArtworks()
     }
 
     private func decode<T: Decodable>(_ type: T.Type, from url: URL) throws -> T {

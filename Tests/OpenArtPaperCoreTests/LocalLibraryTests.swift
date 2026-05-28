@@ -91,6 +91,70 @@ final class LocalLibraryTests: XCTestCase {
         XCTAssertEqual(downloaded.first?.1, existingFile)
     }
 
+    func testLoadDownloadedCollectionsAndFilteredArtworksUseExistingLocalFiles() throws {
+        let root = try makeTemporaryLibraryRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let catalogJSON = """
+        {
+          "schemaVersion": 1,
+          "generatedAt": "2026-05-26T12:00:00Z",
+          "collections": [
+            {
+              "id": "essentials-5k",
+              "title": "Essentials 5K",
+              "shortName": "Essentials",
+              "sourcePackId": 0,
+              "artworkCount": 1,
+              "expectedArtworkCount": 5000,
+              "manifest": "collections/essentials.json"
+            },
+            {
+              "id": "other-collection",
+              "title": "Other Collection",
+              "shortName": "Other",
+              "sourcePackId": 1,
+              "artworkCount": 1,
+              "expectedArtworkCount": 1,
+              "manifest": "collections/other.json"
+            }
+          ]
+        }
+        """
+        try catalogJSON.data(using: .utf8)!.write(to: root.appendingPathComponent("catalog.json"))
+        try writeCollection(
+            to: root,
+            artworks: [artworkJSON(id: "missing-artwork", localPath: "images/missing.jpg")]
+        )
+        try writeCollection(
+            to: root,
+            manifestName: "other",
+            id: "other-collection",
+            title: "Other Collection",
+            shortName: "Other",
+            packId: 1,
+            artworks: [artworkJSON(id: "existing-artwork", localPath: "images/other/existing.jpg")]
+        )
+
+        let existingFile = root.appendingPathComponent("images/other/existing.jpg")
+        try FileManager.default.createDirectory(
+            at: existingFile.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try Data("image".utf8).write(to: existingFile)
+
+        let library = LocalLibrary(root: root)
+        let downloadedCollections = try library.loadDownloadedCollections()
+        let downloaded = try library.loadDownloadedArtworks(collectionIDs: ["other-collection"])
+        let filteredOut = try library.loadDownloadedArtworks(collectionIDs: ["essentials-5k"])
+
+        XCTAssertEqual(downloadedCollections.map(\.id), ["other-collection"])
+        XCTAssertEqual(downloaded.count, 1)
+        XCTAssertEqual(downloaded.first?.0.id, "existing-artwork")
+        XCTAssertEqual(downloaded.first?.1, existingFile)
+        XCTAssertEqual(filteredOut.count, 0)
+    }
+
     private func makeTemporaryLibraryRoot() throws -> URL {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("OpenArtPaperCoreTests")
@@ -124,17 +188,25 @@ final class LocalLibraryTests: XCTestCase {
         try catalogJSON.data(using: .utf8)!.write(to: root.appendingPathComponent("catalog.json"))
     }
 
-    private func writeCollection(to root: URL, artworks: [String]) throws {
+    private func writeCollection(
+        to root: URL,
+        manifestName: String = "essentials",
+        id: String = "essentials-5k",
+        title: String = "Essentials 5K",
+        shortName: String = "Essentials",
+        packId: Int = 0,
+        artworks: [String]
+    ) throws {
         let collectionJSON = """
         {
           "schemaVersion": 1,
-          "id": "essentials-5k",
-          "title": "Essentials 5K",
-          "shortName": "Essentials",
+          "id": "\(id)",
+          "title": "\(title)",
+          "shortName": "\(shortName)",
           "generatedAt": "2026-05-26T12:00:00Z",
           "source": {
             "type": "artpaper-bundle",
-            "packId": 0,
+            "packId": \(packId),
             "reportedSizesMb": {
               "regular": 0,
               "hd": 332,
@@ -148,7 +220,7 @@ final class LocalLibraryTests: XCTestCase {
         """
 
         try collectionJSON.data(using: .utf8)!.write(
-            to: root.appendingPathComponent("collections/essentials.json")
+            to: root.appendingPathComponent("collections/\(manifestName).json")
         )
     }
 

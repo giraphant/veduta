@@ -33,6 +33,31 @@ final class RandomArtworkPickerTests: XCTestCase {
         XCTAssertNotEqual(secondPick.0.id, firstPick.0.id)
     }
 
+    func testPickerReturnsDifferentArtworksForMultipleDisplaysWhenAvailable() throws {
+        let artworks = [
+            (makeArtwork(id: "artwork-1"), URL(fileURLWithPath: "/tmp/artwork-1.jpg")),
+            (makeArtwork(id: "artwork-2"), URL(fileURLWithPath: "/tmp/artwork-2.jpg")),
+            (makeArtwork(id: "artwork-3"), URL(fileURLWithPath: "/tmp/artwork-3.jpg"))
+        ]
+
+        let picked = try RandomArtworkPicker().pick(count: 3, from: artworks)
+
+        XCTAssertEqual(picked.count, 3)
+        XCTAssertEqual(Set(picked.map { $0.0.id }).count, 3)
+    }
+
+    func testPickerRepeatsArtworksWhenDisplaysOutnumberLibrary() throws {
+        let artworks = [
+            (makeArtwork(id: "artwork-1"), URL(fileURLWithPath: "/tmp/artwork-1.jpg")),
+            (makeArtwork(id: "artwork-2"), URL(fileURLWithPath: "/tmp/artwork-2.jpg"))
+        ]
+
+        let picked = try RandomArtworkPicker().pick(count: 3, from: artworks)
+
+        XCTAssertEqual(picked.count, 3)
+        XCTAssertEqual(Set(picked.map { $0.0.id }).count, 2)
+    }
+
     private func makeArtwork(id: String) -> Artwork {
         Artwork(
             id: id,

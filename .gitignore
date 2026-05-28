@@ -12,3 +12,4 @@ htmlcov/
 OpenArtPaperLibrary/
 data/library/
 *.partial
+.superpowers/
