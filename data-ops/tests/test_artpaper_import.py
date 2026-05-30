@@ -33,6 +33,7 @@ def test_import_artpaper_bundle_reads_packages_and_collection_json(tmp_path):
         {
             "title": "Still Life with Lemons, Oranges and a Pomegranate",
             "link": "asset-viewer/example",
+            "gap": "https://artsandculture.google.com/asset/specific-artwork/specific-id",
             "artist_link": "https://www.google.com/search?q=Jacob+van+Hulsdonck",
             "source": "CI_TAB",
             "creator": "Jacob van Hulsdonck",
@@ -57,5 +58,5 @@ def test_import_artpaper_bundle_reads_packages_and_collection_json(tmp_path):
     assert artwork.title == "Still Life with Lemons, Oranges and a Pomegranate"
     assert artwork.creator == "Jacob van Hulsdonck"
     assert artwork.attribution == "The J. Paul Getty Museum"
-    assert artwork.canonical_page == "https://artsandculture.google.com/asset/example"
+    assert artwork.canonical_page == "https://artsandculture.google.com/asset/specific-artwork/specific-id"
     assert artwork.upstream_image_base == "https://lh6.ggpht.com/example-image"

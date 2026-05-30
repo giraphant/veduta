@@ -23,7 +23,10 @@ def https_url(value: str) -> str:
 
 
 def google_arts_page(link: str) -> str:
-    cleaned = link.strip().lstrip("/")
+    cleaned = link.strip()
+    if cleaned.startswith("http://") or cleaned.startswith("https://"):
+        return https_url(cleaned)
+    cleaned = cleaned.lstrip("/")
     if cleaned.startswith("asset-viewer/"):
         cleaned = f"asset/{cleaned.removeprefix('asset-viewer/')}"
     return f"https://artsandculture.google.com/{cleaned}"
@@ -64,7 +67,7 @@ def import_artpaper_bundle(app_path: Path) -> SourceLibrary:
                 title=title,
                 creator=creator,
                 attribution=str(raw.get("attribution") or "Unknown collection"),
-                canonical_page=google_arts_page(str(raw.get("link") or "")),
+                canonical_page=google_arts_page(str(raw.get("gap") or raw.get("link") or "")),
                 artist_page=str(raw.get("artist_link") or "") or None,
                 upstream_image_base=image_base,
                 source_pack_id=pack_id,

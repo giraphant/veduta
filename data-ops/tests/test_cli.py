@@ -27,6 +27,9 @@ def write_library(
                         "fallbackUrls": [fallback_url_template.format(artwork_id=artwork_id)],
                     },
                 },
+                "sources": {
+                    "canonicalPage": f"https://artsandculture.google.com/asset/{artwork_id}/google-id",
+                },
             }
             for artwork_id in artwork_ids
         ],
@@ -153,3 +156,70 @@ def test_download_all_preflights_every_collection_before_downloading(tmp_path, m
 
     assert result == 1
     assert calls == []
+
+
+def test_dezoomify_google_arts_updates_wallpaper_metadata(tmp_path, monkeypatch):
+    write_library(tmp_path, ["success"])
+    calls = []
+
+    def fake_dezoomify(canonical_page, destination, **kwargs):
+        calls.append((canonical_page, destination, kwargs))
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_bytes(b"image")
+        return {
+            "width": 5547,
+            "height": 4000,
+            "bytes": 123,
+            "sha256": "abc",
+            "url": canonical_page,
+        }
+
+    monkeypatch.setattr(cli, "dezoomify_google_arts", fake_dezoomify)
+
+    result = cli.main([
+        "dezoomify-google-arts",
+        "--library-root", str(tmp_path),
+        "--collection", "essentials",
+        "--limit", "1",
+        "--min-width", "2500",
+    ])
+
+    assert result == 0
+    assert calls[0][0] == "https://artsandculture.google.com/asset/success/google-id"
+    assert calls[0][1] == tmp_path / "images/essentials/success.jpg"
+    collection = json.loads((tmp_path / "collections" / "essentials.json").read_text(encoding="utf-8"))
+    wallpaper = collection["artworks"][0]["images"]["wallpaper"]
+    assert wallpaper["width"] == 5547
+    assert wallpaper["height"] == 4000
+    assert wallpaper["bytes"] == 123
+    assert wallpaper["sha256"] == "abc"
+    assert wallpaper["downloadedFrom"] == "https://artsandculture.google.com/asset/success/google-id"
+
+
+def test_dezoomify_google_arts_limit_bounds_processed_artworks(tmp_path, monkeypatch):
+    write_library(tmp_path, ["first", "second"])
+    calls = []
+
+    def fake_dezoomify(canonical_page, destination, **kwargs):
+        calls.append(canonical_page)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_bytes(b"image")
+        return {
+            "width": 5547,
+            "height": 4000,
+            "bytes": 123,
+            "sha256": "abc",
+            "url": canonical_page,
+        }
+
+    monkeypatch.setattr(cli, "dezoomify_google_arts", fake_dezoomify)
+
+    result = cli.main([
+        "dezoomify-google-arts",
+        "--library-root", str(tmp_path),
+        "--collection", "essentials",
+        "--limit", "1",
+    ])
+
+    assert result == 0
+    assert calls == ["https://artsandculture.google.com/asset/first/google-id"]

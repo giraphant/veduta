@@ -7,6 +7,7 @@ from urllib.parse import urlparse
 
 from openartpaper_data.artpaper_import import import_artpaper_bundle
 from openartpaper_data.downloader import download_first_working
+from openartpaper_data.google_arts_dezoom import dezoomify_google_arts
 from openartpaper_data.installed_packs import default_artpaper_image_root, import_installed_pack_images
 from openartpaper_data.library_writer import update_wallpaper_metadata, write_metadata_library
 
@@ -134,6 +135,67 @@ def import_installed_packs(args: argparse.Namespace) -> int:
     return 1 if summary.copied_count == 0 or summary.missing_count > 0 else 0
 
 
+def dezoomify_collection(args: argparse.Namespace) -> int:
+    library_root = Path(args.library_root).expanduser()
+    catalog = load_catalog(library_root)
+    collection_summary = selected_collections(catalog, args.collection, False)[0]
+    manifest_path = library_root / str(collection_summary["manifest"])
+    collection = load_collection(library_root, str(collection_summary["manifest"]))
+    failures_path = library_root / "dezoomify-failures.jsonl"
+    failures_path.unlink(missing_ok=True)
+    successes = 0
+    failures = 0
+    processed = 0
+
+    for artwork in collection["artworks"]:
+        if args.limit is not None and processed >= args.limit:
+            break
+        processed += 1
+        wallpaper = artwork["images"]["wallpaper"]
+        destination = library_root / str(wallpaper["localPath"])
+        if destination.exists() and not args.force:
+            successes += 1
+            print(f"skipped: {collection['id']}/{artwork['id']} already exists")
+            continue
+        try:
+            result = dezoomify_google_arts(
+                str(artwork["sources"]["canonicalPage"]),
+                destination,
+                command=str(args.command),
+                parallelism=int(args.parallelism),
+                min_interval=str(args.min_interval),
+                retries=int(args.retries),
+                min_width=args.min_width,
+                timeout=float(args.timeout),
+            )
+            metadata = {
+                "width": result["width"],
+                "height": result["height"],
+                "bytes": result["bytes"],
+                "sha256": result["sha256"],
+                "downloadedFrom": result["url"],
+            }
+            update_wallpaper_metadata(manifest_path, str(artwork["id"]), metadata)
+            successes += 1
+            print(f"dezoomified: {collection['id']}/{artwork['id']} {metadata['width']}x{metadata['height']}")
+        except Exception as error:
+            failures += 1
+            failures_path.parent.mkdir(parents=True, exist_ok=True)
+            with failures_path.open("a", encoding="utf-8") as handle:
+                handle.write(json.dumps({
+                    "collection": collection["id"],
+                    "artwork": artwork["id"],
+                    "error": str(error),
+                }, ensure_ascii=False) + "\n")
+            print(f"failed: {collection['id']}/{artwork['id']}: {error}", file=sys.stderr)
+
+        if args.artwork_delay > 0 and (args.limit is None or processed < args.limit):
+            time.sleep(float(args.artwork_delay))
+
+    print(f"Dezoomify pass complete: {successes} successes, {failures} failures")
+    return 1 if failures > 0 else 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="openartpaper-data")
     subcommands = parser.add_subparsers(dest="command", required=True)
@@ -156,6 +218,20 @@ def build_parser() -> argparse.ArgumentParser:
     import_installed_parser.add_argument("--quality", choices=["5k", "hd", "regular"], default="5k")
     import_installed_parser.add_argument("--collection")
     import_installed_parser.set_defaults(func=import_installed_packs)
+
+    dezoomify_parser = subcommands.add_parser("dezoomify-google-arts")
+    dezoomify_parser.add_argument("--library-root", default=str(default_library_root()))
+    dezoomify_parser.add_argument("--collection", required=True)
+    dezoomify_parser.add_argument("--limit", type=int)
+    dezoomify_parser.add_argument("--force", action="store_true")
+    dezoomify_parser.add_argument("--command", default="dezoomify-rs")
+    dezoomify_parser.add_argument("--parallelism", type=int, default=4)
+    dezoomify_parser.add_argument("--min-interval", default="100ms")
+    dezoomify_parser.add_argument("--retries", type=int, default=2)
+    dezoomify_parser.add_argument("--min-width", type=int, default=2500)
+    dezoomify_parser.add_argument("--timeout", type=float, default=600)
+    dezoomify_parser.add_argument("--artwork-delay", type=float, default=0)
+    dezoomify_parser.set_defaults(func=dezoomify_collection)
 
     return parser
 
