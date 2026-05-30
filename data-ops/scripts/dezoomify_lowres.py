@@ -32,7 +32,7 @@ LIBRARY_ROOT = Path(os.environ.get(
 UA = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
       "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
 DEZOOMIFY = "dezoomify-rs"
-SEARCH_DELAY = 5.0  # seconds between Google Arts searches
+SEARCH_DELAY = 300.0  # 5 min between searches to avoid 429
 DEZOOMIFY_DELAY = 1.0
 SEARCH_RETRIES = 3
 
