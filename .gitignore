@@ -13,3 +13,5 @@ OpenArtPaperLibrary/
 data/library/
 *.partial
 .superpowers/
+.playwright-mcp/
+.claude/scheduled_tasks.lock
