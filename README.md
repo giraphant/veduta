@@ -4,6 +4,8 @@ A local-first, open-source macOS wallpaper app for public-domain and museum artw
 
 The name comes from *veduta* — the 18th-century genre of highly detailed view paintings. The idea is the same: a faithful, full-resolution picture on your desktop, refreshed whenever you like.
 
+Veduta is inspired by [ArtPaper](https://gikken.co/artpaper/) by Gikken — it grew out of wanting that experience as an open-source, local-first app.
+
 Right now Veduta is two things: a local data pipeline that builds an artwork library on your machine, and a minimal menu-bar app that rotates wallpapers from it. Hosting, sync, and a packaged release come later.
 
 ## How it works
