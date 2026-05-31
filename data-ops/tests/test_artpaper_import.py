@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from openartpaper_data.artpaper_import import import_artpaper_bundle, slugify
+from veduta_data.artpaper_import import import_artpaper_bundle, slugify
 
 
 def write_json(path: Path, value: object) -> None:

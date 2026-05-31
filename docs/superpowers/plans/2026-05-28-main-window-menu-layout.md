@@ -4,7 +4,7 @@
 
 **Goal:** Replace the current small settings-style UI and menu-bar dropdown with a standard macOS main window layout: left sidebar, native grouped detail pages, and a concise companion status menu.
 
-**Architecture:** Keep the current AppKit lifecycle in `Sources/OpenArtPaper/main.swift` and continue hosting SwiftUI from `SettingsWindowController`; this avoids converting the package executable to a SwiftUI `@main` app. Repurpose the existing settings window into the app's main window, add a native `NavigationSplitView`/`Form` detail layout, and update the AppDelegate menu builder to open/focus that window.
+**Architecture:** Keep the current AppKit lifecycle in `Sources/Veduta/main.swift` and continue hosting SwiftUI from `SettingsWindowController`; this avoids converting the package executable to a SwiftUI `@main` app. Repurpose the existing settings window into the app's main window, add a native `NavigationSplitView`/`Form` detail layout, and update the AppDelegate menu builder to open/focus that window.
 
 **Tech Stack:** Swift 5.9, SwiftUI, AppKit `NSStatusItem`, Swift Package Manager, XCTest for existing core tests, manual macOS UI verification.
 
@@ -12,15 +12,15 @@
 
 ## File Structure
 
-- Modify `Sources/OpenArtPaper/SettingsWindowController.swift`
+- Modify `Sources/Veduta/SettingsWindowController.swift`
   - Keep this file as the hosted SwiftUI window controller to minimize churn.
   - Change the window title/size to a main-window shape.
   - Change `SettingsPane` to the final sidebar pages: `wallpaper`, `settings`, `collections`, `library`, `about`.
   - Replace custom cards/gradient icons with native `List` sidebar and grouped `Form` detail pages.
   - Add `libraryPath` and `downloadedCollectionCount` to `SettingsSnapshot` so the Library page can render without reading app state directly.
 
-- Modify `Sources/OpenArtPaper/main.swift`
-  - Rename the menu action from settings-oriented wording to `Open OpenArtPaper`.
+- Modify `Sources/Veduta/main.swift`
+  - Rename the menu action from settings-oriented wording to `Open Veduta`.
   - Reorder the status menu to match the design spec.
   - Add a `collectionsMenu()` helper so collections live under a submenu instead of inline menu rows.
   - Populate the new snapshot fields from `library.root` and `collectionSummaries.count`.
@@ -36,12 +36,12 @@
 ## Task 1: Extend the settings snapshot for main-window content
 
 **Files:**
-- Modify: `Sources/OpenArtPaper/SettingsWindowController.swift:24-43`
-- Modify: `Sources/OpenArtPaper/main.swift:264-282`
+- Modify: `Sources/Veduta/SettingsWindowController.swift:24-43`
+- Modify: `Sources/Veduta/main.swift:264-282`
 
 - [ ] **Step 1: Update `SettingsSnapshot` fields**
 
-In `Sources/OpenArtPaper/SettingsWindowController.swift`, change the struct and `.empty` value to include library information:
+In `Sources/Veduta/SettingsWindowController.swift`, change the struct and `.empty` value to include library information:
 
 ```swift
 struct SettingsSnapshot: Equatable {
@@ -75,11 +75,11 @@ struct SettingsSnapshot: Equatable {
 
 Run: `swift build`
 
-Expected: FAIL with an error pointing at `SettingsSnapshot(` in `Sources/OpenArtPaper/main.swift` because `libraryPath` and `downloadedCollectionCount` are missing.
+Expected: FAIL with an error pointing at `SettingsSnapshot(` in `Sources/Veduta/main.swift` because `libraryPath` and `downloadedCollectionCount` are missing.
 
 - [ ] **Step 3: Populate snapshot fields from `AppDelegate.settingsSnapshot()`**
 
-In `Sources/OpenArtPaper/main.swift`, update `settingsSnapshot()` to pass the new fields at the end:
+In `Sources/Veduta/main.swift`, update `settingsSnapshot()` to pass the new fields at the end:
 
 ```swift
 private func settingsSnapshot() -> SettingsSnapshot {
@@ -117,14 +117,14 @@ Expected: PASS, or only errors from later tasks if this task is being applied to
 Only run this if the user explicitly authorized commits for this implementation session:
 
 ```bash
-git add Sources/OpenArtPaper/SettingsWindowController.swift Sources/OpenArtPaper/main.swift
+git add Sources/Veduta/SettingsWindowController.swift Sources/Veduta/main.swift
 git commit -m "refactor: extend app window snapshot"
 ```
 
 ## Task 2: Change the window shell and sidebar pages
 
 **Files:**
-- Modify: `Sources/OpenArtPaper/SettingsWindowController.swift:56-115`
+- Modify: `Sources/Veduta/SettingsWindowController.swift:56-115`
 
 - [ ] **Step 1: Replace `SettingsPane` with the main-window page list**
 
@@ -177,14 +177,14 @@ init() {
         backing: .buffered,
         defer: false
     )
-    window.title = "OpenArtPaper"
+    window.title = "Veduta"
     window.isReleasedWhenClosed = false
     window.minSize = NSSize(width: 820, height: 540)
     super.init(window: window)
     window.contentViewController = hostingController
     window.titlebarAppearsTransparent = true
     window.toolbarStyle = .unified
-    window.setFrameAutosaveName("OpenArtPaperMainWindow")
+    window.setFrameAutosaveName("VedutaMainWindow")
     window.center()
 }
 ```
@@ -200,14 +200,14 @@ Expected: FAIL until the detail `switch` and sidebar loops are updated in Task 3
 Only run this if the user explicitly authorized commits for this implementation session:
 
 ```bash
-git add Sources/OpenArtPaper/SettingsWindowController.swift
+git add Sources/Veduta/SettingsWindowController.swift
 git commit -m "refactor: define main window sidebar pages"
 ```
 
 ## Task 3: Replace custom settings cards with native grouped forms
 
 **Files:**
-- Modify: `Sources/OpenArtPaper/SettingsWindowController.swift:171-593`
+- Modify: `Sources/Veduta/SettingsWindowController.swift:171-593`
 
 - [ ] **Step 1: Replace `SettingsView.body`, sidebar, and detail switch**
 
@@ -278,7 +278,7 @@ private var settingsPane: some View {
         }
 
         Section("Recovery") {
-            Text("If both icons are hidden, open OpenArtPaper again from Finder or Spotlight to show this window.")
+            Text("If both icons are hidden, open Veduta again from Finder or Spotlight to show this window.")
                 .foregroundStyle(.secondary)
         }
     }
@@ -404,9 +404,9 @@ Replace the current `aboutPane` with:
 ```swift
 private var aboutPane: some View {
     Form {
-        Section("OpenArtPaper") {
+        Section("Veduta") {
             LabeledContent("App") {
-                Text("OpenArtPaper")
+                Text("Veduta")
             }
 
             Text("A local-first open-source wallpaper rotator for macOS.")
@@ -415,7 +415,7 @@ private var aboutPane: some View {
 
         Section("Actions") {
             Button("Open Library Folder", action: onOpenLibraryFolder)
-            Button("Quit OpenArtPaper", action: onQuit)
+            Button("Quit Veduta", action: onQuit)
         }
     }
     .formStyle(.grouped)
@@ -450,15 +450,15 @@ Expected: PASS.
 Only run this if the user explicitly authorized commits for this implementation session:
 
 ```bash
-git add Sources/OpenArtPaper/SettingsWindowController.swift
+git add Sources/Veduta/SettingsWindowController.swift
 git commit -m "refactor: use native main window forms"
 ```
 
 ## Task 4: Reorder the menu-bar dropdown around the main window
 
 **Files:**
-- Modify: `Sources/OpenArtPaper/main.swift:49-99`
-- Modify: `Sources/OpenArtPaper/main.swift:185-219`
+- Modify: `Sources/Veduta/main.swift:49-99`
+- Modify: `Sources/Veduta/main.swift:185-219`
 
 - [ ] **Step 1: Replace `rebuildMenu(message:)` ordering**
 
@@ -470,7 +470,7 @@ private func rebuildMenu(message: String) {
     guard let statusItem else { return }
     let menu = NSMenu()
 
-    let openItem = NSMenuItem(title: "Open OpenArtPaper", action: #selector(openMainWindow), keyEquivalent: "")
+    let openItem = NSMenuItem(title: "Open Veduta", action: #selector(openMainWindow), keyEquivalent: "")
     openItem.target = self
     menu.addItem(openItem)
 
@@ -498,7 +498,7 @@ private func rebuildMenu(message: String) {
 
     menu.addItem(.separator())
 
-    let quitItem = NSMenuItem(title: "Quit OpenArtPaper", action: #selector(quit), keyEquivalent: "q")
+    let quitItem = NSMenuItem(title: "Quit Veduta", action: #selector(quit), keyEquivalent: "q")
     quitItem.target = self
     menu.addItem(quitItem)
 
@@ -552,7 +552,7 @@ Expected: PASS.
 Only run this if the user explicitly authorized commits for this implementation session:
 
 ```bash
-git add Sources/OpenArtPaper/main.swift
+git add Sources/Veduta/main.swift
 git commit -m "refactor: simplify menu bar dropdown"
 ```
 
@@ -565,13 +565,13 @@ git commit -m "refactor: simplify menu bar dropdown"
 
 Run: `swift test`
 
-Expected: PASS for existing OpenArtPaperCore tests.
+Expected: PASS for existing VedutaCore tests.
 
 - [ ] **Step 2: Run a full Swift build**
 
 Run: `swift build`
 
-Expected: PASS for `OpenArtPaperCore` and `OpenArtPaper` targets.
+Expected: PASS for `VedutaCore` and `Veduta` targets.
 
 - [ ] **Step 3: Commit verification-only changes if commits are authorized and there are staged docs/gitignore changes**
 
@@ -592,7 +592,7 @@ git commit -m "docs: plan main window menu layout"
 
 Run: `make run-app`
 
-Expected: The app launches and opens an `OpenArtPaper` window.
+Expected: The app launches and opens an `Veduta` window.
 
 - [ ] **Step 2: Verify the main window**
 
@@ -614,18 +614,18 @@ Expected UI checks:
 Expected menu order:
 
 ```text
-Open OpenArtPaper
+Open Veduta
 ---
 Next Wallpaper
 Current Wallpapers      (submenu, when current selections exist)
 Collections             (submenu, when collections exist)
 Rotation Interval       (submenu)
 ---
-Quit OpenArtPaper
+Quit Veduta
 ```
 
 - [ ] **Step 4: Stop the app from the menu**
 
-Use `Quit OpenArtPaper` from the status menu.
+Use `Quit Veduta` from the status menu.
 
 Expected: App exits cleanly.

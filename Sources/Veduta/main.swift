@@ -1,6 +1,6 @@
 import AppKit
 import Foundation
-import OpenArtPaperCore
+import VedutaCore
 
 final class AppDelegate: NSObject, NSApplicationDelegate, SettingsWindowControllerDelegate {
     private var statusItem: NSStatusItem?
@@ -20,14 +20,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SettingsWindowControll
     private var timer: Timer?
 
     private lazy var library: LocalLibrary = {
-        let environmentPath = ProcessInfo.processInfo.environment["OPENARTPAPER_LIBRARY_DIR"]
+        let environmentPath = ProcessInfo.processInfo.environment["VEDUTA_LIBRARY_DIR"]
         let root: URL
         if let environmentPath, !environmentPath.isEmpty {
             root = URL(fileURLWithPath: environmentPath).standardizedFileURL
         } else {
             root = FileManager.default.homeDirectoryForCurrentUser
                 .appendingPathComponent("Pictures")
-                .appendingPathComponent("OpenArtPaperLibrary")
+                .appendingPathComponent("VedutaLibrary")
         }
         return LocalLibrary(root: root)
     }()
@@ -51,7 +51,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SettingsWindowControll
         guard let statusItem else { return }
         let menu = NSMenu()
 
-        let openItem = NSMenuItem(title: "Open OpenArtPaper", action: #selector(openMainWindow), keyEquivalent: "")
+        let openItem = NSMenuItem(title: "Open Veduta", action: #selector(openMainWindow), keyEquivalent: "")
         openItem.target = self
         menu.addItem(openItem)
 
@@ -79,7 +79,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SettingsWindowControll
 
         menu.addItem(.separator())
 
-        let quitItem = NSMenuItem(title: "Quit OpenArtPaper", action: #selector(quit), keyEquivalent: "q")
+        let quitItem = NSMenuItem(title: "Quit Veduta", action: #selector(quit), keyEquivalent: "q")
         quitItem.target = self
         menu.addItem(quitItem)
 
@@ -229,7 +229,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SettingsWindowControll
             rebuildMenu(message: "Ready")
             updateSettingsWindow()
         } catch {
-            rebuildMenu(message: "OpenArtPaper error: \(error.localizedDescription)")
+            rebuildMenu(message: "Veduta error: \(error.localizedDescription)")
             updateSettingsWindow()
         }
     }

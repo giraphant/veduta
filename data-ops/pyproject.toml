@@ -1,12 +1,12 @@
 [project]
-name = "openartpaper-data"
+name = "veduta-data"
 version = "0.1.0"
-description = "Local data pipeline for OpenArtPaper"
+description = "Local data pipeline for Veduta"
 requires-python = ">=3.11"
 dependencies = []
 
 [project.scripts]
-openartpaper-data = "openartpaper_data.cli:main"
+veduta-data = "veduta_data.cli:main"
 
 [build-system]
 requires = ["setuptools>=68"]

@@ -6,7 +6,7 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-USER_AGENT = "OpenArtPaper/0.1 (+https://github.com/openartpaper/openartpaper)"
+USER_AGENT = "Veduta/0.1 (+https://github.com/veduta/veduta)"
 
 
 def choose_download_state(final_path: Path) -> str:

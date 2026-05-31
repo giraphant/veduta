@@ -1,10 +1,10 @@
-# OpenArtPaper Local-First Implementation Plan
+# Veduta Local-First Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Build a local-first OpenArtPaper prototype that imports ArtPaper's 16 bundled collection manifests, downloads the highest practical artwork images to a local library, and runs a minimal macOS menu-bar app that rotates wallpapers from that local library.
+**Goal:** Build a local-first Veduta prototype that imports ArtPaper's 16 bundled collection manifests, downloads the highest practical artwork images to a local library, and runs a minimal macOS menu-bar app that rotates wallpapers from that local library.
 
-**Architecture:** A Python `data-ops` CLI owns ingestion: it reads the local ArtPaper.app bundle, normalizes metadata, downloads images, and writes a self-contained library under `~/Pictures/OpenArtPaperLibrary`. A Swift package owns the client: `OpenArtPaperCore` loads local manifests and chooses wallpapers, while the `OpenArtPaper` executable is a lightweight AppKit menu-bar app. CDN/mirror publishing is intentionally deferred until the local library and client are stable; the schema already separates upstream source URLs from local/mirror image paths.
+**Architecture:** A Python `data-ops` CLI owns ingestion: it reads the local ArtPaper.app bundle, normalizes metadata, downloads images, and writes a self-contained library under `~/Pictures/VedutaLibrary`. A Swift package owns the client: `VedutaCore` loads local manifests and chooses wallpapers, while the `Veduta` executable is a lightweight AppKit menu-bar app. CDN/mirror publishing is intentionally deferred until the local library and client are stable; the schema already separates upstream source URLs from local/mirror image paths.
 
 **Tech Stack:** Python 3.11+ stdlib + pytest for data operations; Swift 5.9+ / macOS 13+ / AppKit / Foundation / XCTest for the client; `sips` for local image dimension inspection; GitHub-flavored Markdown for project roadmap docs.
 
@@ -18,7 +18,7 @@
 - Preserve source attribution and Google Arts image base URLs.
 - Download high-resolution local images using Google image size suffixes, preferring `=s0` and falling back to `=s8192`, `=s6000`, `=s5120`, and `=s4096`.
 - Resume interrupted downloads without redownloading completed images.
-- Write normalized local manifests to `~/Pictures/OpenArtPaperLibrary`.
+- Write normalized local manifests to `~/Pictures/VedutaLibrary`.
 - Build a minimal local-only macOS menu-bar app:
   - status-bar item
   - manual “Next Wallpaper”
@@ -41,14 +41,14 @@
 ## File Structure
 
 ```text
-openartpaper/
+veduta/
 ├── .gitignore
 ├── Makefile
 ├── README.md
 ├── Package.swift
 ├── data-ops/
 │   ├── pyproject.toml
-│   ├── src/openartpaper_data/
+│   ├── src/veduta_data/
 │   │   ├── __init__.py
 │   │   ├── artpaper_import.py
 │   │   ├── cli.py
@@ -60,15 +60,15 @@ openartpaper/
 │       ├── test_downloader.py
 │       └── test_library_writer.py
 ├── Sources/
-│   ├── OpenArtPaper/
+│   ├── Veduta/
 │   │   └── main.swift
-│   └── OpenArtPaperCore/
+│   └── VedutaCore/
 │       ├── LocalLibrary.swift
 │       ├── Models.swift
 │       ├── RandomArtworkPicker.swift
 │       └── WallpaperService.swift
 └── Tests/
-    └── OpenArtPaperCoreTests/
+    └── VedutaCoreTests/
         ├── LocalLibraryTests.swift
         └── RandomArtworkPickerTests.swift
 ```
@@ -76,7 +76,7 @@ openartpaper/
 Generated local data lives outside the repo by default:
 
 ```text
-~/Pictures/OpenArtPaperLibrary/
+~/Pictures/VedutaLibrary/
 ├── catalog.json
 ├── collections/
 │   ├── essentials.json
@@ -90,7 +90,7 @@ Generated local data lives outside the repo by default:
 └── failures.jsonl
 ```
 
-The repo may use `OPENARTPAPER_LIBRARY_DIR` for tests and development, but production defaults to `~/Pictures/OpenArtPaperLibrary`.
+The repo may use `VEDUTA_LIBRARY_DIR` for tests and development, but production defaults to `~/Pictures/VedutaLibrary`.
 
 ---
 
@@ -100,7 +100,7 @@ The repo may use `OPENARTPAPER_LIBRARY_DIR` for tests and development, but produ
 - Create: `.gitignore`
 - Create: `Makefile`
 - Create: `data-ops/pyproject.toml`
-- Create: `data-ops/src/openartpaper_data/__init__.py`
+- Create: `data-ops/src/veduta_data/__init__.py`
 
 - [ ] **Step 1: Create `.gitignore`**
 
@@ -116,7 +116,7 @@ __pycache__/
 .env
 coverage.xml
 htmlcov/
-OpenArtPaperLibrary/
+VedutaLibrary/
 data/library/
 *.partial
 ```
@@ -125,14 +125,14 @@ data/library/
 
 ```toml
 [project]
-name = "openartpaper-data"
+name = "veduta-data"
 version = "0.1.0"
-description = "Local data pipeline for OpenArtPaper"
+description = "Local data pipeline for Veduta"
 requires-python = ">=3.11"
 dependencies = []
 
 [project.scripts]
-openartpaper-data = "openartpaper_data.cli:main"
+veduta-data = "veduta_data.cli:main"
 
 [build-system]
 requires = ["setuptools>=68"]
@@ -146,7 +146,7 @@ testpaths = ["tests"]
 pythonpath = ["src"]
 ```
 
-- [ ] **Step 3: Create `data-ops/src/openartpaper_data/__init__.py`**
+- [ ] **Step 3: Create `data-ops/src/veduta_data/__init__.py`**
 
 ```python
 __all__ = []
@@ -156,7 +156,7 @@ __all__ = []
 
 ```makefile
 ARTPAPER_APP ?= /Applications/Artpaper.app
-LIBRARY_ROOT ?= $(HOME)/Pictures/OpenArtPaperLibrary
+LIBRARY_ROOT ?= $(HOME)/Pictures/VedutaLibrary
 PYTHONPATH := data-ops/src
 
 .PHONY: test-data test-swift test import-metadata download-essentials download-all run-app
@@ -170,16 +170,16 @@ test-swift:
 test: test-data test-swift
 
 import-metadata:
-	cd data-ops && PYTHONPATH=src python3 -m openartpaper_data.cli import-metadata --artpaper-app "$(ARTPAPER_APP)" --library-root "$(LIBRARY_ROOT)"
+	cd data-ops && PYTHONPATH=src python3 -m veduta_data.cli import-metadata --artpaper-app "$(ARTPAPER_APP)" --library-root "$(LIBRARY_ROOT)"
 
 download-essentials:
-	cd data-ops && PYTHONPATH=src python3 -m openartpaper_data.cli download --library-root "$(LIBRARY_ROOT)" --collection essentials --delay 1.0
+	cd data-ops && PYTHONPATH=src python3 -m veduta_data.cli download --library-root "$(LIBRARY_ROOT)" --collection essentials --delay 1.0
 
 download-all:
-	cd data-ops && PYTHONPATH=src python3 -m openartpaper_data.cli download --library-root "$(LIBRARY_ROOT)" --all --delay 1.0
+	cd data-ops && PYTHONPATH=src python3 -m veduta_data.cli download --library-root "$(LIBRARY_ROOT)" --all --delay 1.0
 
 run-app:
-	OPENARTPAPER_LIBRARY_DIR="$(LIBRARY_ROOT)" swift run OpenArtPaper
+	VEDUTA_LIBRARY_DIR="$(LIBRARY_ROOT)" swift run Veduta
 ```
 
 - [ ] **Step 5: Run scaffold checks**
@@ -211,7 +211,7 @@ error: Could not find Package.swift in this directory or any of its parent direc
 - [ ] **Step 6: Commit scaffolding**
 
 ```bash
-git add .gitignore Makefile data-ops/pyproject.toml data-ops/src/openartpaper_data/__init__.py
+git add .gitignore Makefile data-ops/pyproject.toml data-ops/src/veduta_data/__init__.py
 git commit -m "chore: scaffold local-first project"
 ```
 
@@ -220,8 +220,8 @@ git commit -m "chore: scaffold local-first project"
 ## Task 2: Data models and ArtPaper bundle importer
 
 **Files:**
-- Create: `data-ops/src/openartpaper_data/models.py`
-- Create: `data-ops/src/openartpaper_data/artpaper_import.py`
+- Create: `data-ops/src/veduta_data/models.py`
+- Create: `data-ops/src/veduta_data/artpaper_import.py`
 - Test: `data-ops/tests/test_artpaper_import.py`
 
 - [ ] **Step 1: Write failing importer tests**
@@ -232,7 +232,7 @@ Create `data-ops/tests/test_artpaper_import.py`:
 import json
 from pathlib import Path
 
-from openartpaper_data.artpaper_import import import_artpaper_bundle, slugify
+from veduta_data.artpaper_import import import_artpaper_bundle, slugify
 
 
 def write_json(path: Path, value: object) -> None:
@@ -303,12 +303,12 @@ cd data-ops && python3 -m pytest tests/test_artpaper_import.py -q
 Expected:
 
 ```text
-ModuleNotFoundError: No module named 'openartpaper_data.artpaper_import'
+ModuleNotFoundError: No module named 'veduta_data.artpaper_import'
 ```
 
 - [ ] **Step 3: Implement models**
 
-Create `data-ops/src/openartpaper_data/models.py`:
+Create `data-ops/src/veduta_data/models.py`:
 
 ```python
 from dataclasses import dataclass, field
@@ -346,7 +346,7 @@ class SourceLibrary:
 
 - [ ] **Step 4: Implement ArtPaper importer**
 
-Create `data-ops/src/openartpaper_data/artpaper_import.py`:
+Create `data-ops/src/veduta_data/artpaper_import.py`:
 
 ```python
 import json
@@ -355,7 +355,7 @@ import unicodedata
 from pathlib import Path
 from urllib.parse import urlparse, urlunparse
 
-from openartpaper_data.models import SourceArtwork, SourceCollection, SourceLibrary
+from veduta_data.models import SourceArtwork, SourceCollection, SourceLibrary
 
 
 def slugify(value: str) -> str:
@@ -451,7 +451,7 @@ Expected:
 - [ ] **Step 6: Commit importer**
 
 ```bash
-git add data-ops/src/openartpaper_data/models.py data-ops/src/openartpaper_data/artpaper_import.py data-ops/tests/test_artpaper_import.py
+git add data-ops/src/veduta_data/models.py data-ops/src/veduta_data/artpaper_import.py data-ops/tests/test_artpaper_import.py
 git commit -m "feat: import ArtPaper bundle metadata"
 ```
 
@@ -460,7 +460,7 @@ git commit -m "feat: import ArtPaper bundle metadata"
 ## Task 3: Normalized local library writer
 
 **Files:**
-- Create: `data-ops/src/openartpaper_data/library_writer.py`
+- Create: `data-ops/src/veduta_data/library_writer.py`
 - Test: `data-ops/tests/test_library_writer.py`
 
 - [ ] **Step 1: Write failing library writer tests**
@@ -471,8 +471,8 @@ Create `data-ops/tests/test_library_writer.py`:
 import json
 from pathlib import Path
 
-from openartpaper_data.library_writer import write_metadata_library
-from openartpaper_data.models import SourceArtwork, SourceCollection, SourceLibrary
+from veduta_data.library_writer import write_metadata_library
+from veduta_data.models import SourceArtwork, SourceCollection, SourceLibrary
 
 
 def sample_library() -> SourceLibrary:
@@ -534,19 +534,19 @@ cd data-ops && python3 -m pytest tests/test_library_writer.py -q
 Expected:
 
 ```text
-ModuleNotFoundError: No module named 'openartpaper_data.library_writer'
+ModuleNotFoundError: No module named 'veduta_data.library_writer'
 ```
 
 - [ ] **Step 3: Implement library writer**
 
-Create `data-ops/src/openartpaper_data/library_writer.py`:
+Create `data-ops/src/veduta_data/library_writer.py`:
 
 ```python
 import json
 from datetime import UTC, datetime
 from pathlib import Path
 
-from openartpaper_data.models import SourceLibrary
+from veduta_data.models import SourceLibrary
 
 IMAGE_SUFFIXES = ["s0", "s8192", "s6000", "s5120", "s4096"]
 
@@ -649,7 +649,7 @@ Expected:
 - [ ] **Step 5: Commit library writer**
 
 ```bash
-git add data-ops/src/openartpaper_data/library_writer.py data-ops/tests/test_library_writer.py
+git add data-ops/src/veduta_data/library_writer.py data-ops/tests/test_library_writer.py
 git commit -m "feat: write local library manifests"
 ```
 
@@ -658,7 +658,7 @@ git commit -m "feat: write local library manifests"
 ## Task 4: High-resolution image downloader
 
 **Files:**
-- Create: `data-ops/src/openartpaper_data/downloader.py`
+- Create: `data-ops/src/veduta_data/downloader.py`
 - Test: `data-ops/tests/test_downloader.py`
 
 - [ ] **Step 1: Write failing downloader tests**
@@ -668,7 +668,7 @@ Create `data-ops/tests/test_downloader.py`:
 ```python
 import hashlib
 
-from openartpaper_data.downloader import choose_download_state, sha256_file
+from veduta_data.downloader import choose_download_state, sha256_file
 
 
 def test_choose_download_state_skips_complete_file(tmp_path):
@@ -686,8 +686,8 @@ def test_choose_download_state_retries_partial_file(tmp_path):
 
 def test_sha256_file_hashes_file_contents(tmp_path):
     path = tmp_path / "payload.bin"
-    path.write_bytes(b"openartpaper")
-    assert sha256_file(path) == hashlib.sha256(b"openartpaper").hexdigest()
+    path.write_bytes(b"veduta")
+    assert sha256_file(path) == hashlib.sha256(b"veduta").hexdigest()
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -701,12 +701,12 @@ cd data-ops && python3 -m pytest tests/test_downloader.py -q
 Expected:
 
 ```text
-ModuleNotFoundError: No module named 'openartpaper_data.downloader'
+ModuleNotFoundError: No module named 'veduta_data.downloader'
 ```
 
 - [ ] **Step 3: Implement downloader utilities**
 
-Create `data-ops/src/openartpaper_data/downloader.py`:
+Create `data-ops/src/veduta_data/downloader.py`:
 
 ```python
 import hashlib
@@ -717,7 +717,7 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-USER_AGENT = "OpenArtPaper/0.1 (+https://github.com/openartpaper/openartpaper)"
+USER_AGENT = "Veduta/0.1 (+https://github.com/veduta/veduta)"
 
 
 def choose_download_state(final_path: Path) -> str:
@@ -825,7 +825,7 @@ Expected:
 - [ ] **Step 5: Commit downloader utilities**
 
 ```bash
-git add data-ops/src/openartpaper_data/downloader.py data-ops/tests/test_downloader.py
+git add data-ops/src/veduta_data/downloader.py data-ops/tests/test_downloader.py
 git commit -m "feat: add resumable image downloader"
 ```
 
@@ -834,13 +834,13 @@ git commit -m "feat: add resumable image downloader"
 ## Task 5: Data-ops CLI
 
 **Files:**
-- Create: `data-ops/src/openartpaper_data/cli.py`
-- Modify: `data-ops/src/openartpaper_data/library_writer.py`
+- Create: `data-ops/src/veduta_data/cli.py`
+- Modify: `data-ops/src/veduta_data/library_writer.py`
 - Test: `data-ops/tests/test_library_writer.py`
 
 - [ ] **Step 1: Extend library writer to persist image metadata**
 
-Modify `data-ops/src/openartpaper_data/library_writer.py` by adding this function below `write_metadata_library`:
+Modify `data-ops/src/veduta_data/library_writer.py` by adding this function below `write_metadata_library`:
 
 ```python
 
@@ -862,7 +862,7 @@ def update_wallpaper_metadata(collection_manifest_path: Path, artwork_id: str, m
 Append to `data-ops/tests/test_library_writer.py`:
 
 ```python
-from openartpaper_data.library_writer import update_wallpaper_metadata
+from veduta_data.library_writer import update_wallpaper_metadata
 
 
 def test_update_wallpaper_metadata_updates_matching_artwork(tmp_path):
@@ -902,7 +902,7 @@ Expected:
 
 - [ ] **Step 4: Implement CLI**
 
-Create `data-ops/src/openartpaper_data/cli.py`:
+Create `data-ops/src/veduta_data/cli.py`:
 
 ```python
 import argparse
@@ -911,13 +911,13 @@ import sys
 import time
 from pathlib import Path
 
-from openartpaper_data.artpaper_import import import_artpaper_bundle
-from openartpaper_data.downloader import download_first_working
-from openartpaper_data.library_writer import update_wallpaper_metadata, write_metadata_library
+from veduta_data.artpaper_import import import_artpaper_bundle
+from veduta_data.downloader import download_first_working
+from veduta_data.library_writer import update_wallpaper_metadata, write_metadata_library
 
 
 def default_library_root() -> Path:
-    return Path.home() / "Pictures" / "OpenArtPaperLibrary"
+    return Path.home() / "Pictures" / "VedutaLibrary"
 
 
 def import_metadata(args: argparse.Namespace) -> int:
@@ -992,7 +992,7 @@ def download(args: argparse.Namespace) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="openartpaper-data")
+    parser = argparse.ArgumentParser(prog="veduta-data")
     subcommands = parser.add_subparsers(dest="command", required=True)
 
     import_parser = subcommands.add_parser("import-metadata")
@@ -1045,7 +1045,7 @@ make import-metadata
 Expected:
 
 ```text
-Imported 16 collections and 1558 artworks into /Users/ramudai/Pictures/OpenArtPaperLibrary
+Imported 16 collections and 1558 artworks into /Users/ramudai/Pictures/VedutaLibrary
 ```
 
 - [ ] **Step 7: Inspect generated collection IDs**
@@ -1056,7 +1056,7 @@ Run:
 python3 - <<'PY'
 import json
 from pathlib import Path
-catalog = json.loads((Path.home() / 'Pictures' / 'OpenArtPaperLibrary' / 'catalog.json').read_text())
+catalog = json.loads((Path.home() / 'Pictures' / 'VedutaLibrary' / 'catalog.json').read_text())
 print('\n'.join(collection['id'] for collection in catalog['collections']))
 PY
 ```
@@ -1085,7 +1085,7 @@ uffizi
 - [ ] **Step 8: Commit CLI**
 
 ```bash
-git add data-ops/src/openartpaper_data/cli.py data-ops/src/openartpaper_data/library_writer.py data-ops/tests/test_library_writer.py
+git add data-ops/src/veduta_data/cli.py data-ops/src/veduta_data/library_writer.py data-ops/tests/test_library_writer.py
 git commit -m "feat: add local data pipeline CLI"
 ```
 
@@ -1094,9 +1094,9 @@ git commit -m "feat: add local data pipeline CLI"
 ## Task 6: Download Essentials at highest practical resolution
 
 **Files:**
-- Generated: `~/Pictures/OpenArtPaperLibrary/images/essentials/*.jpg`
-- Generated/modified: `~/Pictures/OpenArtPaperLibrary/collections/essentials.json`
-- Generated/modified: `~/Pictures/OpenArtPaperLibrary/failures.jsonl`
+- Generated: `~/Pictures/VedutaLibrary/images/essentials/*.jpg`
+- Generated/modified: `~/Pictures/VedutaLibrary/collections/essentials.json`
+- Generated/modified: `~/Pictures/VedutaLibrary/failures.jsonl`
 
 - [ ] **Step 1: Run Essentials download pass**
 
@@ -1120,7 +1120,7 @@ If Google returns fewer than 161 successful images, the expected final line is:
 Download pass complete: <successes> successes, <failures> failures
 ```
 
-and `~/Pictures/OpenArtPaperLibrary/failures.jsonl` contains one JSON object per failed artwork.
+and `~/Pictures/VedutaLibrary/failures.jsonl` contains one JSON object per failed artwork.
 
 - [ ] **Step 2: Retry failed Essentials downloads once**
 
@@ -1137,7 +1137,7 @@ Expected: completed files are printed as `skipped`, failed files are retried, an
 Run:
 
 ```bash
-find "$HOME/Pictures/OpenArtPaperLibrary/images/essentials" -type f -name '*.jpg' | wc -l
+find "$HOME/Pictures/VedutaLibrary/images/essentials" -type f -name '*.jpg' | wc -l
 ```
 
 Expected:
@@ -1154,7 +1154,7 @@ Run:
 python3 - <<'PY'
 import json
 from pathlib import Path
-manifest = json.loads((Path.home() / 'Pictures' / 'OpenArtPaperLibrary' / 'collections' / 'essentials.json').read_text())
+manifest = json.loads((Path.home() / 'Pictures' / 'VedutaLibrary' / 'collections' / 'essentials.json').read_text())
 missing = []
 for artwork in manifest['artworks']:
     wallpaper = artwork['images']['wallpaper']
@@ -1177,7 +1177,7 @@ Do not commit the downloaded images. Commit only code changes from prior tasks i
 
 ```bash
 git status --short
-git add data-ops/src/openartpaper_data data-ops/tests Makefile .gitignore
+git add data-ops/src/veduta_data data-ops/tests Makefile .gitignore
 git commit -m "chore: verify essentials data pipeline"
 ```
 
@@ -1188,9 +1188,9 @@ If `git status --short` shows no code changes, skip this commit.
 ## Task 7: Download all 16 collections locally
 
 **Files:**
-- Generated: `~/Pictures/OpenArtPaperLibrary/images/<collection-id>/*.jpg`
-- Generated/modified: `~/Pictures/OpenArtPaperLibrary/collections/*.json`
-- Generated/modified: `~/Pictures/OpenArtPaperLibrary/failures.jsonl`
+- Generated: `~/Pictures/VedutaLibrary/images/<collection-id>/*.jpg`
+- Generated/modified: `~/Pictures/VedutaLibrary/collections/*.json`
+- Generated/modified: `~/Pictures/VedutaLibrary/failures.jsonl`
 
 - [ ] **Step 1: Run the full collection download pass**
 
@@ -1227,7 +1227,7 @@ Expected: previously completed files are skipped; transient failures are retried
 Run:
 
 ```bash
-find "$HOME/Pictures/OpenArtPaperLibrary/images" -type f -name '*.jpg' | wc -l
+find "$HOME/Pictures/VedutaLibrary/images" -type f -name '*.jpg' | wc -l
 ```
 
 Expected if all upstream URLs still work:
@@ -1239,7 +1239,7 @@ Expected if all upstream URLs still work:
 If the count is lower, inspect failures:
 
 ```bash
-wc -l "$HOME/Pictures/OpenArtPaperLibrary/failures.jsonl"
+wc -l "$HOME/Pictures/VedutaLibrary/failures.jsonl"
 ```
 
 Expected: number of failed attempts across all runs.
@@ -1252,7 +1252,7 @@ Run:
 python3 - <<'PY'
 import json
 from pathlib import Path
-root = Path.home() / 'Pictures' / 'OpenArtPaperLibrary'
+root = Path.home() / 'Pictures' / 'VedutaLibrary'
 missing_files = []
 for manifest_path in sorted((root / 'collections').glob('*.json')):
     manifest = json.loads(manifest_path.read_text())
@@ -1280,8 +1280,8 @@ Do not commit local images. The README task below records the expected local lib
 
 **Files:**
 - Create: `Package.swift`
-- Create: `Sources/OpenArtPaperCore/Models.swift`
-- Test: `Tests/OpenArtPaperCoreTests/LocalLibraryTests.swift`
+- Create: `Sources/VedutaCore/Models.swift`
+- Test: `Tests/VedutaCoreTests/LocalLibraryTests.swift`
 
 - [ ] **Step 1: Create `Package.swift`**
 
@@ -1290,27 +1290,27 @@ Do not commit local images. The README task below records the expected local lib
 import PackageDescription
 
 let package = Package(
-    name: "OpenArtPaper",
+    name: "Veduta",
     platforms: [.macOS(.v13)],
     products: [
-        .library(name: "OpenArtPaperCore", targets: ["OpenArtPaperCore"]),
-        .executable(name: "OpenArtPaper", targets: ["OpenArtPaper"]),
+        .library(name: "VedutaCore", targets: ["VedutaCore"]),
+        .executable(name: "Veduta", targets: ["Veduta"]),
     ],
     targets: [
-        .target(name: "OpenArtPaperCore"),
-        .executableTarget(name: "OpenArtPaper", dependencies: ["OpenArtPaperCore"]),
-        .testTarget(name: "OpenArtPaperCoreTests", dependencies: ["OpenArtPaperCore"]),
+        .target(name: "VedutaCore"),
+        .executableTarget(name: "Veduta", dependencies: ["VedutaCore"]),
+        .testTarget(name: "VedutaCoreTests", dependencies: ["VedutaCore"]),
     ]
 )
 ```
 
 - [ ] **Step 2: Write failing model decode test**
 
-Create `Tests/OpenArtPaperCoreTests/LocalLibraryTests.swift`:
+Create `Tests/VedutaCoreTests/LocalLibraryTests.swift`:
 
 ```swift
 import XCTest
-@testable import OpenArtPaperCore
+@testable import VedutaCore
 
 final class LocalLibraryTests: XCTestCase {
     func testDecodesCatalogAndCollectionManifest() throws {
@@ -1383,12 +1383,12 @@ swift test --filter LocalLibraryTests/testDecodesCatalogAndCollectionManifest
 Expected:
 
 ```text
-error: no such module 'OpenArtPaperCore'
+error: no such module 'VedutaCore'
 ```
 
 - [ ] **Step 4: Implement Swift models**
 
-Create `Sources/OpenArtPaperCore/Models.swift`:
+Create `Sources/VedutaCore/Models.swift`:
 
 ```swift
 import Foundation
@@ -1457,7 +1457,7 @@ public struct WallpaperImage: Decodable, Sendable, Equatable {
 
 - [ ] **Step 5: Implement local library loader**
 
-Create `Sources/OpenArtPaperCore/LocalLibrary.swift`:
+Create `Sources/VedutaCore/LocalLibrary.swift`:
 
 ```swift
 import Foundation
@@ -1518,8 +1518,8 @@ Test Suite 'Selected tests' passed
 - [ ] **Step 7: Commit Swift models**
 
 ```bash
-git add Package.swift Sources/OpenArtPaperCore/Models.swift Sources/OpenArtPaperCore/LocalLibrary.swift Tests/OpenArtPaperCoreTests/LocalLibraryTests.swift
-git commit -m "feat: load local OpenArtPaper library"
+git add Package.swift Sources/VedutaCore/Models.swift Sources/VedutaCore/LocalLibrary.swift Tests/VedutaCoreTests/LocalLibraryTests.swift
+git commit -m "feat: load local Veduta library"
 ```
 
 ---
@@ -1527,18 +1527,18 @@ git commit -m "feat: load local OpenArtPaper library"
 ## Task 9: Random artwork picker and wallpaper service
 
 **Files:**
-- Create: `Sources/OpenArtPaperCore/RandomArtworkPicker.swift`
-- Create: `Sources/OpenArtPaperCore/WallpaperService.swift`
-- Test: `Tests/OpenArtPaperCoreTests/RandomArtworkPickerTests.swift`
+- Create: `Sources/VedutaCore/RandomArtworkPicker.swift`
+- Create: `Sources/VedutaCore/WallpaperService.swift`
+- Test: `Tests/VedutaCoreTests/RandomArtworkPickerTests.swift`
 
 - [ ] **Step 1: Write failing picker test**
 
-Create `Tests/OpenArtPaperCoreTests/RandomArtworkPickerTests.swift`:
+Create `Tests/VedutaCoreTests/RandomArtworkPickerTests.swift`:
 
 ```swift
 import Foundation
 import XCTest
-@testable import OpenArtPaperCore
+@testable import VedutaCore
 
 final class RandomArtworkPickerTests: XCTestCase {
     func testPickerReturnsOnlyArtworkFromInput() throws {
@@ -1579,7 +1579,7 @@ error: cannot find 'RandomArtworkPicker' in scope
 
 - [ ] **Step 3: Implement picker**
 
-Create `Sources/OpenArtPaperCore/RandomArtworkPicker.swift`:
+Create `Sources/VedutaCore/RandomArtworkPicker.swift`:
 
 ```swift
 import Foundation
@@ -1609,7 +1609,7 @@ public final class RandomArtworkPicker {
 
 - [ ] **Step 4: Implement wallpaper service**
 
-Create `Sources/OpenArtPaperCore/WallpaperService.swift`:
+Create `Sources/VedutaCore/WallpaperService.swift`:
 
 ```swift
 import AppKit
@@ -1644,7 +1644,7 @@ Test Suite 'All tests' passed
 - [ ] **Step 6: Commit picker and wallpaper service**
 
 ```bash
-git add Sources/OpenArtPaperCore/RandomArtworkPicker.swift Sources/OpenArtPaperCore/WallpaperService.swift Tests/OpenArtPaperCoreTests/RandomArtworkPickerTests.swift
+git add Sources/VedutaCore/RandomArtworkPicker.swift Sources/VedutaCore/WallpaperService.swift Tests/VedutaCoreTests/RandomArtworkPickerTests.swift
 git commit -m "feat: pick and apply local wallpapers"
 ```
 
@@ -1653,16 +1653,16 @@ git commit -m "feat: pick and apply local wallpapers"
 ## Task 10: Minimal menu-bar app
 
 **Files:**
-- Create: `Sources/OpenArtPaper/main.swift`
+- Create: `Sources/Veduta/main.swift`
 
 - [ ] **Step 1: Create menu-bar executable**
 
-Create `Sources/OpenArtPaper/main.swift`:
+Create `Sources/Veduta/main.swift`:
 
 ```swift
 import AppKit
 import Foundation
-import OpenArtPaperCore
+import VedutaCore
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem!
@@ -1672,14 +1672,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var timer: Timer?
 
     private lazy var library: LocalLibrary = {
-        let environmentPath = ProcessInfo.processInfo.environment["OPENARTPAPER_LIBRARY_DIR"]
+        let environmentPath = ProcessInfo.processInfo.environment["VEDUTA_LIBRARY_DIR"]
         let root: URL
         if let environmentPath, !environmentPath.isEmpty {
             root = URL(fileURLWithPath: environmentPath).standardizedFileURL
         } else {
             root = FileManager.default.homeDirectoryForCurrentUser
                 .appendingPathComponent("Pictures")
-                .appendingPathComponent("OpenArtPaperLibrary")
+                .appendingPathComponent("VedutaLibrary")
         }
         return LocalLibrary(root: root)
     }()
@@ -1705,7 +1705,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(NSMenuItem(title: "Next Wallpaper", action: #selector(nextWallpaper), keyEquivalent: "n"))
         menu.addItem(NSMenuItem(title: "Open Library Folder", action: #selector(openLibraryFolder), keyEquivalent: "o"))
         menu.addItem(.separator())
-        menu.addItem(NSMenuItem(title: "Quit OpenArtPaper", action: #selector(quit), keyEquivalent: "q"))
+        menu.addItem(NSMenuItem(title: "Quit Veduta", action: #selector(quit), keyEquivalent: "q"))
         statusItem.menu = menu
     }
 
@@ -1721,7 +1721,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             currentArtwork = selected.0
             rebuildMenu(message: "Ready")
         } catch {
-            rebuildMenu(message: "OpenArtPaper error: \(error.localizedDescription)")
+            rebuildMenu(message: "Veduta error: \(error.localizedDescription)")
         }
     }
 
@@ -1766,16 +1766,16 @@ make run-app
 Expected:
 
 - A menu-bar item titled `Art` appears.
-- The current desktop wallpaper changes to a downloaded OpenArtPaper image.
+- The current desktop wallpaper changes to a downloaded Veduta image.
 - The menu shows the current artwork title and creator.
 - Selecting `Next Wallpaper` changes the wallpaper again.
-- Selecting `Open Library Folder` opens `~/Pictures/OpenArtPaperLibrary`.
-- Selecting `Quit OpenArtPaper` exits the process.
+- Selecting `Open Library Folder` opens `~/Pictures/VedutaLibrary`.
+- Selecting `Quit Veduta` exits the process.
 
 - [ ] **Step 4: Commit menu-bar app**
 
 ```bash
-git add Sources/OpenArtPaper/main.swift
+git add Sources/Veduta/main.swift
 git commit -m "feat: add minimal menu bar wallpaper app"
 ```
 
@@ -1791,18 +1791,18 @@ git commit -m "feat: add minimal menu bar wallpaper app"
 Create `README.md`:
 
 ```markdown
-# OpenArtPaper
+# Veduta
 
-OpenArtPaper is a local-first, open-source macOS wallpaper app for public-domain and museum artwork.
+Veduta is a local-first, open-source macOS wallpaper app for public-domain and museum artwork.
 
 The first milestone is deliberately boring: make the local data pipeline and a minimal menu-bar wallpaper app work before adding hosting, syncing, gallery UI, or release packaging.
 
 ## Current milestone: local library first
 
-The current workflow uses a locally installed copy of ArtPaper only as a seed for metadata. The generated OpenArtPaper library lives outside the repository by default:
+The current workflow uses a locally installed copy of ArtPaper only as a seed for metadata. The generated Veduta library lives outside the repository by default:
 
 ```text
-~/Pictures/OpenArtPaperLibrary/
+~/Pictures/VedutaLibrary/
 ├── catalog.json
 ├── collections/*.json
 └── images/<collection-id>/*.jpg
@@ -1826,7 +1826,7 @@ make import-metadata
 Expected result:
 
 ```text
-Imported 16 collections and 1558 artworks into ~/Pictures/OpenArtPaperLibrary
+Imported 16 collections and 1558 artworks into ~/Pictures/VedutaLibrary
 ```
 
 ## Download artwork
@@ -1846,7 +1846,7 @@ make download-all
 Downloads are resumable. Completed files are skipped. Failures are recorded in:
 
 ```text
-~/Pictures/OpenArtPaperLibrary/failures.jsonl
+~/Pictures/VedutaLibrary/failures.jsonl
 ```
 
 ## Run the local app
@@ -1862,7 +1862,7 @@ The app runs as a menu-bar process and rotates wallpapers from the local library
 ### Phase 1: Local data pipeline
 
 - Import all 16 ArtPaper collection manifests.
-- Normalize metadata into OpenArtPaper schema.
+- Normalize metadata into Veduta schema.
 - Download highest practical local image files.
 - Resume failed downloads safely.
 - Verify dimensions, file sizes, and SHA-256 hashes.
@@ -1951,7 +1951,7 @@ make import-metadata
 Expected:
 
 ```text
-Imported 16 collections and 1558 artworks into /Users/ramudai/Pictures/OpenArtPaperLibrary
+Imported 16 collections and 1558 artworks into /Users/ramudai/Pictures/VedutaLibrary
 ```
 
 - [ ] **Step 4: Verify Essentials image library exists**
@@ -1959,7 +1959,7 @@ Imported 16 collections and 1558 artworks into /Users/ramudai/Pictures/OpenArtPa
 Run:
 
 ```bash
-find "$HOME/Pictures/OpenArtPaperLibrary/images/essentials" -type f -name '*.jpg' | wc -l
+find "$HOME/Pictures/VedutaLibrary/images/essentials" -type f -name '*.jpg' | wc -l
 ```
 
 Expected after Task 6:
@@ -1982,7 +1982,7 @@ Expected:
 - Wallpaper changes once at launch.
 - `Next Wallpaper` changes wallpaper again.
 - `Open Library Folder` opens the local library.
-- `Quit OpenArtPaper` exits the app.
+- `Quit Veduta` exits the app.
 
 - [ ] **Step 6: Commit verification note only if source changed**
 
@@ -1995,7 +1995,7 @@ git status --short
 If no source files changed, do not commit. If README or scripts were adjusted during verification, commit those exact files:
 
 ```bash
-git add README.md Makefile data-ops/src/openartpaper_data Sources Tests
+git add README.md Makefile data-ops/src/veduta_data Sources Tests
 git commit -m "chore: complete local-first verification"
 ```
 
@@ -2005,21 +2005,21 @@ git commit -m "chore: complete local-first verification"
 
 Once Task 12 passes, create the next plan file instead of expanding this one. Use these exact follow-up plan names:
 
-1. `docs/superpowers/plans/2026-05-27-openartpaper-local-product.md`
+1. `docs/superpowers/plans/2026-05-27-veduta-local-product.md`
    - interval setting UI
    - collection filtering
    - favorites
    - current-artwork detail panel
    - launch at login
 
-2. `docs/superpowers/plans/2026-05-28-openartpaper-static-mirror.md`
+2. `docs/superpowers/plans/2026-05-28-veduta-static-mirror.md`
    - export CDN-ready manifest
    - upload script for static origin
    - Cloudflare cache headers
    - mirror verification
    - upstream fallback policy
 
-3. `docs/superpowers/plans/2026-05-29-openartpaper-release-packaging.md`
+3. `docs/superpowers/plans/2026-05-29-veduta-release-packaging.md`
    - app bundle generation
    - icon
    - signing

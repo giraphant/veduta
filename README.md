@@ -1,108 +1,51 @@
-# OpenArtPaper
+# Veduta
 
-OpenArtPaper is a local-first, open-source macOS wallpaper app for public-domain and museum artwork.
+A local-first, open-source macOS wallpaper app for public-domain and museum artwork.
 
-The current goal is a reliable local data pipeline plus a minimal menu-bar app. Hosting, sync, gallery features, and release packaging come later.
+The name comes from *veduta* — the 18th-century genre of highly detailed view paintings. The idea is the same: a faithful, full-resolution picture on your desktop, refreshed whenever you like.
 
-## Current local-first workflow
+Right now Veduta is two things: a local data pipeline that builds an artwork library on your machine, and a minimal menu-bar app that rotates wallpapers from it. Hosting, sync, and a packaged release come later.
 
-Generated artwork data lives outside the repo at:
+## How it works
+
+The pipeline writes a library outside the repo, under `~/Pictures/VedutaLibrary/`:
 
 ```text
-~/Pictures/OpenArtPaperLibrary/
+~/Pictures/VedutaLibrary/
 ├── catalog.json
 ├── collections/*.json
 └── images/<collection-id>/*.jpg
 ```
 
-The repository does not commit downloaded artwork or generated local library files.
+Downloaded artwork and generated library files are never committed.
 
 ## Requirements
 
 - macOS 13+
 - Swift 5.9+
 - Python 3.11+
-- Local ArtPaper app at `/Applications/Artpaper.app` for the initial metadata import
-- Optional installed ArtPaper sandbox 5K pack for Essentials import
+- ArtPaper installed at `/Applications/Artpaper.app` (used only for the initial metadata import)
+- Optional: the installed ArtPaper 5K pack, for high-resolution Essentials
 
 ## Commands
 
 ```sh
-make import-metadata
+make import-metadata             # import metadata from the local ArtPaper app
+make import-installed-essentials # import the real 5K Essentials images (preferred)
+make download-essentials         # fallback; Google previews cap around 1200px
+make run-app                     # run the menu-bar app
 ```
 
-Imports metadata from the local ArtPaper app into the OpenArtPaper local library.
-
-```sh
-make import-installed-essentials
-```
-
-Preferred path for the Essentials collection when the installed ArtPaper sandbox contains `5k_pack_0`; this imports the actual 5K Essentials images locally.
-
-```sh
-make download-essentials
-```
-
-Fallback only. The current Google preview URLs for Essentials cap images around 1200px, so use the installed-pack import when available.
-
-```sh
-make download-all
-```
-
-Do not use this yet. Collections 7-15 currently reference local package filenames such as `0.jpg`, not HTTP URLs, and high-resolution acquisition for those collections still needs to be revised.
-
-```sh
-make run-app
-```
-
-Runs the minimal menu-bar app that rotates wallpapers from the local library.
-
-## Current data-source notes
-
-The root-cause finding so far: Google manifest URLs are preview URLs capped around 1200px. ArtPaper's actual 5K Essentials images came from the installed `5k_pack_0` package, not from those Google preview URLs.
+`make download-all` isn't ready yet — collections 7–15 still need a high-resolution source.
 
 ## Roadmap
 
-### 1. Local data pipeline
+1. **Data pipeline** — metadata and Essentials import work; other collections still need a high-res source.
+2. **Menu-bar app** — read the local library, pick a random artwork, set it as wallpaper, basic controls. *(done)*
+3. **Better local app** — intervals, collection filters, favorites, artwork details, launch at login.
+4. **Self-hosted mirror** — export CDN-ready manifests and images, serve from a static origin, keep upstream fallback and provenance.
+5. **Public release** — app bundle, icon, signing, notarization, GitHub Releases.
 
-Status: metadata import and Essentials installed-pack import are done.
+## License
 
-Remaining work: define and implement a high-resolution acquisition strategy for the other collections.
-
-### 2. Minimal macOS app
-
-Build the first menu-bar app that:
-
-- Reads local manifests from `~/Pictures/OpenArtPaperLibrary/`
-- Chooses a random downloaded artwork
-- Sets the selected image as the macOS wallpaper
-- Provides basic menu controls
-
-### 3. Better local product
-
-Improve the local app experience with:
-
-- Interval settings
-- Collection filtering
-- Favorites
-- Artwork detail views
-- Launch-at-login support
-
-### 4. Self-hosted mirror
-
-Prepare a hosted distribution path without making the app depend on it first:
-
-- Export CDN-ready manifests and images
-- Serve from a static origin
-- Put Cloudflare in front
-- Preserve upstream fallback and provenance metadata
-
-### 5. Public release
-
-Package the app for public use:
-
-- App bundle
-- Icon
-- Code signing
-- Notarization
-- GitHub Releases
+Open source. Artwork is public-domain or museum-provided; see each collection's metadata for provenance.

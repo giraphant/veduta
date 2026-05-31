@@ -3,7 +3,7 @@ import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
 
-from openartpaper_data.models import SourceLibrary
+from veduta_data.models import SourceLibrary
 
 IMAGE_SUFFIXES = ["s0", "s8192", "s6000", "s5120", "s4096"]
 

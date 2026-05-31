@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Scan Wikimedia Commons for undownloaded OpenArtPaper artworks.
+"""Scan Wikimedia Commons for undownloaded Veduta artworks.
 
 For each artwork missing a local image, searches Commons using the
 Wikimedia API and picks the best match (preferring "Google Art Project"
@@ -18,12 +18,12 @@ import urllib.request
 from pathlib import Path
 
 LIBRARY_ROOT = Path(os.environ.get(
-    "OPENARTPAPER_LIBRARY",
-    os.path.expanduser("~/Pictures/OpenArtPaperLibrary"),
+    "VEDUTA_LIBRARY",
+    os.path.expanduser("~/Pictures/VedutaLibrary"),
 ))
 
 API_URL = "https://commons.wikimedia.org/w/api.php"
-UA = "OpenArtPaper/1.0 (gallery-expansion; courtesy bot)"
+UA = "Veduta/1.0 (gallery-expansion; courtesy bot)"
 RATE_LIMIT = 1.5  # seconds between API calls (be kind to Wikimedia)
 MAX_RETRIES = 5
 

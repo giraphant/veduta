@@ -15,16 +15,16 @@ from pathlib import Path
 # Add data-ops src to path so we can import the existing modules
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from openartpaper_data.downloader import (
+from veduta_data.downloader import (
     download_url,
     image_dimensions,
     sha256_file,
 )
-from openartpaper_data.library_writer import update_wallpaper_metadata
+from veduta_data.library_writer import update_wallpaper_metadata
 
 LIBRARY_ROOT = Path(os.environ.get(
-    "OPENARTPAPER_LIBRARY",
-    os.path.expanduser("~/Pictures/OpenArtPaperLibrary"),
+    "VEDUTA_LIBRARY",
+    os.path.expanduser("~/Pictures/VedutaLibrary"),
 ))
 
 RATE_LIMIT = 1.0  # seconds between downloads (be kind to Wikimedia)
@@ -90,7 +90,7 @@ def download_one(match: dict, delay: float) -> bool:
             if a["id"] == aid:
                 a["sources"]["canonicalPage"] = match["commons_page"]
                 break
-        from openartpaper_data.library_writer import write_json
+        from veduta_data.library_writer import write_json
         write_json(manifest_path, manifest2)
 
         print(f"    ✓ {aid} ({width}×{height}, {file_size/1024/1024:.1f} MB)", flush=True)

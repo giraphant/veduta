@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Apply audited high-res replacements for low-res OpenArtPaper artworks.
+"""Apply audited high-res replacements for low-res Veduta artworks.
 
-Reads JSON arrays from ~/Pictures/OpenArtPaperLibrary/lowres_audit_candidates/*.json.
+Reads JSON arrays from ~/Pictures/VedutaLibrary/lowres_audit_candidates/*.json.
 Each candidate must include id and candidate_url.
 
 This only applies verified candidates: it downloads the candidate image, verifies
@@ -21,12 +21,12 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from openartpaper_data.downloader import image_dimensions, sha256_file
-from openartpaper_data.library_writer import write_json
+from veduta_data.downloader import image_dimensions, sha256_file
+from veduta_data.library_writer import write_json
 
-LIBRARY_ROOT = Path(os.environ.get("OPENARTPAPER_LIBRARY", os.path.expanduser("~/Pictures/OpenArtPaperLibrary")))
+LIBRARY_ROOT = Path(os.environ.get("VEDUTA_LIBRARY", os.path.expanduser("~/Pictures/VedutaLibrary")))
 CANDIDATE_DIR = LIBRARY_ROOT / "lowres_audit_candidates"
-USER_AGENT = "OpenArtPaper/0.1 high-res audit applicator"
+USER_AGENT = "Veduta/0.1 high-res audit applicator"
 
 
 def load_manifests() -> dict[str, tuple[Path, dict]]:

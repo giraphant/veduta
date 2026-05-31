@@ -1,19 +1,19 @@
-# OpenArtPaper Main Window and Menu Layout Design
+# Veduta Main Window and Menu Layout Design
 
 ## Goal
 
-Make OpenArtPaper feel like a standard mature macOS menu-bar app by adopting the reference app's window structure and menu arrangement: a native window with a left sidebar, right-side grouped settings pages, and a concise menu-bar dropdown. The design borrows layout hierarchy only; colors and control styling stay native/system-provided.
+Make Veduta feel like a standard mature macOS menu-bar app by adopting the reference app's window structure and menu arrangement: a native window with a left sidebar, right-side grouped settings pages, and a concise menu-bar dropdown. The design borrows layout hierarchy only; colors and control styling stay native/system-provided.
 
 ## Reference Boundary
 
-The reference project is `hoomanaskari/mac-dictate-anywhere`, which uses a main macOS window with a sidebar and native SwiftUI controls. Its MIT license permits reference, but OpenArtPaper should not copy code or branding. We will adapt the arrangement: sidebar navigation, page titles, grouped rows, and a menu-bar entry point.
+The reference project is `hoomanaskari/mac-dictate-anywhere`, which uses a main macOS window with a sidebar and native SwiftUI controls. Its MIT license permits reference, but Veduta should not copy code or branding. We will adapt the arrangement: sidebar navigation, page titles, grouped rows, and a menu-bar entry point.
 
 ## Window Structure
 
-OpenArtPaper should present a standard main window rather than a small custom settings panel.
+Veduta should present a standard main window rather than a small custom settings panel.
 
 - Use a SwiftUI `NavigationSplitView` hosted from AppKit so the existing menu-bar app architecture can stay intact.
-- Default window title: `OpenArtPaper`.
+- Default window title: `Veduta`.
 - Use a stable sidebar on the left and detail content on the right.
 - Let macOS handle window background, dark mode, sidebar selection color, row styling, and native control colors.
 - Avoid custom gradient icons, custom color palettes, oversized cards, or showcase-style headers.
@@ -77,24 +77,24 @@ Page content:
 
 ### About
 
-- `OpenArtPaper` section:
+- `Veduta` section:
   - Short description: `A local-first open-source wallpaper rotator for macOS.`
 - `Actions` section:
   - `Open Library Folder`.
-  - `Quit OpenArtPaper`.
+  - `Quit Veduta`.
 
 ## Menu-Bar Dropdown
 
 Rearrange the status-menu dropdown to feel like a standard companion menu for the main window:
 
-1. `Open OpenArtPaper` — opens/focuses the main window.
+1. `Open Veduta` — opens/focuses the main window.
 2. Separator.
 3. `Next Wallpaper`.
 4. `Current Wallpapers` submenu when there is at least one current selection.
 5. `Collections` submenu when downloaded collections exist.
 6. `Rotation Interval` submenu.
 7. Separator.
-8. `Quit OpenArtPaper`.
+8. `Quit Veduta`.
 
 The collections submenu should use checkmarks and preserve the existing rule that at least one collection remains enabled. The current wallpaper submenu should keep reveal/open-source actions.
 
@@ -102,7 +102,7 @@ The collections submenu should use checkmarks and preserve the existing rule tha
 
 - Launch should show the main window, matching the current app behavior of showing settings on start.
 - Reopening the app from Finder/Spotlight should show/focus the same main window.
-- Menu-bar `Open OpenArtPaper` should show/focus the same main window.
+- Menu-bar `Open Veduta` should show/focus the same main window.
 - `Next Wallpaper`, rotation changes, and collection toggles should update both the menu and the window snapshot.
 - Existing preferences and local-library behavior should remain unchanged.
 

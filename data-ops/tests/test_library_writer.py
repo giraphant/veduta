@@ -3,8 +3,8 @@ from pathlib import Path
 
 import pytest
 
-from openartpaper_data.library_writer import update_wallpaper_metadata, write_json, write_metadata_library
-from openartpaper_data.models import SourceArtwork, SourceCollection, SourceLibrary
+from veduta_data.library_writer import update_wallpaper_metadata, write_json, write_metadata_library
+from veduta_data.models import SourceArtwork, SourceCollection, SourceLibrary
 
 
 def sample_library() -> SourceLibrary:

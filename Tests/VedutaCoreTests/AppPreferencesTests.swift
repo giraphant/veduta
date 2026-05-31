@@ -1,5 +1,5 @@
 import XCTest
-@testable import OpenArtPaperCore
+@testable import VedutaCore
 
 final class AppPreferencesTests: XCTestCase {
     private var defaults: UserDefaults!
@@ -7,7 +7,7 @@ final class AppPreferencesTests: XCTestCase {
 
     override func setUp() {
         super.setUp()
-        suiteName = "OpenArtPaperTests.\(UUID().uuidString)"
+        suiteName = "VedutaTests.\(UUID().uuidString)"
         defaults = UserDefaults(suiteName: suiteName)
         defaults.removePersistentDomain(forName: suiteName)
     }

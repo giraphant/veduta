@@ -1,7 +1,7 @@
 import hashlib
 
-import openartpaper_data.downloader as downloader
-from openartpaper_data.downloader import choose_download_state, download_first_working, sha256_file
+import veduta_data.downloader as downloader
+from veduta_data.downloader import choose_download_state, download_first_working, sha256_file
 
 
 def test_choose_download_state_skips_complete_file(tmp_path):
@@ -19,8 +19,8 @@ def test_choose_download_state_retries_partial_file(tmp_path):
 
 def test_sha256_file_hashes_file_contents(tmp_path):
     path = tmp_path / "payload.bin"
-    path.write_bytes(b"openartpaper")
-    assert sha256_file(path) == hashlib.sha256(b"openartpaper").hexdigest()
+    path.write_bytes(b"veduta")
+    assert sha256_file(path) == hashlib.sha256(b"veduta").hexdigest()
 
 
 def test_download_first_working_redownloads_corrupt_existing_file(tmp_path, monkeypatch):

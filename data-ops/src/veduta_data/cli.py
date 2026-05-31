@@ -5,15 +5,15 @@ import time
 from pathlib import Path
 from urllib.parse import urlparse
 
-from openartpaper_data.artpaper_import import import_artpaper_bundle
-from openartpaper_data.downloader import download_first_working
-from openartpaper_data.google_arts_dezoom import dezoomify_google_arts
-from openartpaper_data.installed_packs import default_artpaper_image_root, import_installed_pack_images
-from openartpaper_data.library_writer import update_wallpaper_metadata, write_metadata_library
+from veduta_data.artpaper_import import import_artpaper_bundle
+from veduta_data.downloader import download_first_working
+from veduta_data.google_arts_dezoom import dezoomify_google_arts
+from veduta_data.installed_packs import default_artpaper_image_root, import_installed_pack_images
+from veduta_data.library_writer import update_wallpaper_metadata, write_metadata_library
 
 
 def default_library_root() -> Path:
-    return Path.home() / "Pictures" / "OpenArtPaperLibrary"
+    return Path.home() / "Pictures" / "VedutaLibrary"
 
 
 def import_metadata(args: argparse.Namespace) -> int:
@@ -197,7 +197,7 @@ def dezoomify_collection(args: argparse.Namespace) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="openartpaper-data")
+    parser = argparse.ArgumentParser(prog="veduta-data")
     subcommands = parser.add_subparsers(dest="command", required=True)
 
     import_parser = subcommands.add_parser("import-metadata")

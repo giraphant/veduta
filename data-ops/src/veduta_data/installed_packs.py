@@ -4,8 +4,8 @@ import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from openartpaper_data.downloader import image_dimensions, sha256_file
-from openartpaper_data.library_writer import update_wallpaper_metadata
+from veduta_data.downloader import image_dimensions, sha256_file
+from veduta_data.library_writer import update_wallpaper_metadata
 
 QUALITY_DIR_PREFIXES = {
     "5k": "5k_pack",

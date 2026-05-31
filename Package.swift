@@ -2,15 +2,15 @@
 import PackageDescription
 
 let package = Package(
-    name: "OpenArtPaper",
+    name: "Veduta",
     platforms: [.macOS(.v13)],
     products: [
-        .library(name: "OpenArtPaperCore", targets: ["OpenArtPaperCore"]),
-        .executable(name: "OpenArtPaper", targets: ["OpenArtPaper"]),
+        .library(name: "VedutaCore", targets: ["VedutaCore"]),
+        .executable(name: "Veduta", targets: ["Veduta"]),
     ],
     targets: [
-        .target(name: "OpenArtPaperCore"),
-        .executableTarget(name: "OpenArtPaper", dependencies: ["OpenArtPaperCore"]),
-        .testTarget(name: "OpenArtPaperCoreTests", dependencies: ["OpenArtPaperCore"]),
+        .target(name: "VedutaCore"),
+        .executableTarget(name: "Veduta", dependencies: ["VedutaCore"]),
+        .testTarget(name: "VedutaCoreTests", dependencies: ["VedutaCore"]),
     ]
 )

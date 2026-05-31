@@ -101,14 +101,14 @@ final class SettingsWindowController: NSWindowController {
             backing: .buffered,
             defer: false
         )
-        window.title = "OpenArtPaper"
+        window.title = "Veduta"
         window.isReleasedWhenClosed = false
         window.minSize = NSSize(width: 820, height: 540)
         super.init(window: window)
         window.contentViewController = hostingController
         window.titlebarAppearsTransparent = true
         window.toolbarStyle = .unified
-        window.setFrameAutosaveName("OpenArtPaperMainWindow")
+        window.setFrameAutosaveName("VedutaMainWindow")
         window.center()
     }
 
@@ -253,7 +253,7 @@ private struct SettingsView: View {
             }
 
             Section("Recovery") {
-                Text("If both icons are hidden, open OpenArtPaper again from Finder or Spotlight to show this window.")
+                Text("If both icons are hidden, open Veduta again from Finder or Spotlight to show this window.")
                     .foregroundStyle(.secondary)
             }
         }
@@ -355,9 +355,9 @@ private struct SettingsView: View {
 
     private var aboutPane: some View {
         Form {
-            Section("OpenArtPaper") {
+            Section("Veduta") {
                 LabeledContent("App") {
-                    Text("OpenArtPaper")
+                    Text("Veduta")
                 }
 
                 Text("A local-first open-source wallpaper rotator for macOS.")
@@ -366,7 +366,7 @@ private struct SettingsView: View {
 
             Section("Actions") {
                 Button("Open Library Folder", action: onOpenLibraryFolder)
-                Button("Quit OpenArtPaper", action: onQuit)
+                Button("Quit Veduta", action: onQuit)
             }
         }
         .formStyle(.grouped)

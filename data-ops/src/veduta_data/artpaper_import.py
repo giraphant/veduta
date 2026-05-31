@@ -4,7 +4,7 @@ import unicodedata
 from pathlib import Path
 from urllib.parse import urlparse, urlunparse
 
-from openartpaper_data.models import SourceArtwork, SourceCollection, SourceLibrary
+from veduta_data.models import SourceArtwork, SourceCollection, SourceLibrary
 
 
 def slugify(value: str) -> str:

@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from openartpaper_data import cli
+from veduta_data import cli
 
 
 def write_library(

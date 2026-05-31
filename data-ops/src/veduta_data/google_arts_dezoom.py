@@ -2,7 +2,7 @@ import subprocess
 from pathlib import Path
 from urllib.parse import urlparse
 
-from openartpaper_data.downloader import image_dimensions, sha256_file
+from veduta_data.downloader import image_dimensions, sha256_file
 
 
 def is_google_arts_asset_url(value: str) -> bool:

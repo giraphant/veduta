@@ -1,5 +1,5 @@
 import XCTest
-@testable import OpenArtPaperCore
+@testable import VedutaCore
 
 final class RandomArtworkPickerTests: XCTestCase {
     func testPickerReturnsOnlyArtworkFromInput() throws {

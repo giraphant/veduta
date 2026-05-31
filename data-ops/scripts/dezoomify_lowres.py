@@ -21,12 +21,12 @@ from pathlib import Path
 # Add data-ops src to path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from openartpaper_data.downloader import sha256_file, image_dimensions
-from openartpaper_data.library_writer import update_wallpaper_metadata, write_json
+from veduta_data.downloader import sha256_file, image_dimensions
+from veduta_data.library_writer import update_wallpaper_metadata, write_json
 
 LIBRARY_ROOT = Path(os.environ.get(
-    "OPENARTPAPER_LIBRARY",
-    os.path.expanduser("~/Pictures/OpenArtPaperLibrary"),
+    "VEDUTA_LIBRARY",
+    os.path.expanduser("~/Pictures/VedutaLibrary"),
 ))
 
 UA = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "

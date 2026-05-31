@@ -1,5 +1,5 @@
 import XCTest
-@testable import OpenArtPaperCore
+@testable import VedutaCore
 
 final class LocalLibraryTests: XCTestCase {
     func testDecodesCatalogAndCollectionManifest() throws {
@@ -157,7 +157,7 @@ final class LocalLibraryTests: XCTestCase {
 
     private func makeTemporaryLibraryRoot() throws -> URL {
         let root = FileManager.default.temporaryDirectory
-            .appendingPathComponent("OpenArtPaperCoreTests")
+            .appendingPathComponent("VedutaCoreTests")
             .appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(
             at: root.appendingPathComponent("collections", isDirectory: true),

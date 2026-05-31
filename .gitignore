@@ -9,7 +9,7 @@ __pycache__/
 .env
 coverage.xml
 htmlcov/
-OpenArtPaperLibrary/
+VedutaLibrary/
 data/library/
 *.partial
 .superpowers/

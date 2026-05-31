@@ -1,8 +1,8 @@
 import json
 from pathlib import Path
 
-from openartpaper_data import cli
-from openartpaper_data import installed_packs
+from veduta_data import cli
+from veduta_data import installed_packs
 
 
 def write_library(root: Path, artworks: list[dict[str, object]]) -> None:

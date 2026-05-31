@@ -16,7 +16,7 @@ import os
 from datetime import UTC, datetime
 from pathlib import Path
 
-LIBRARY_ROOT = Path(os.environ.get("OPENARTPAPER_LIBRARY", os.path.expanduser("~/Pictures/OpenArtPaperLibrary")))
+LIBRARY_ROOT = Path(os.environ.get("VEDUTA_LIBRARY", os.path.expanduser("~/Pictures/VedutaLibrary")))
 EXCLUSION_REASON = "low-resolution-no-high-res-source"
 
 
