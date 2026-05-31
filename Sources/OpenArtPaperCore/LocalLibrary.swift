@@ -29,7 +29,8 @@ public final class LocalLibrary {
         for summary in catalog.collections {
             let collection = try loadCollection(summary)
             if collection.artworks.contains(where: { artwork in
-                FileManager.default.fileExists(atPath: wallpaperURL(for: artwork).path)
+                artwork.images.wallpaper.excluded != true
+                    && FileManager.default.fileExists(atPath: wallpaperURL(for: artwork).path)
             }) {
                 downloadedCollections.append(summary)
             }
@@ -50,7 +51,8 @@ public final class LocalLibrary {
             let collection = try loadCollection(summary)
             for artwork in collection.artworks {
                 let url = wallpaperURL(for: artwork)
-                if FileManager.default.fileExists(atPath: url.path) {
+                if artwork.images.wallpaper.excluded != true,
+                   FileManager.default.fileExists(atPath: url.path) {
                     downloadedArtworks.append((artwork, url))
                 }
             }

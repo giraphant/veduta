@@ -149,6 +149,11 @@ public struct WallpaperImage: Decodable, Sendable, Equatable {
     public let sha256: String?
     public let downloadedFrom: String?
     public let importedFromArtPaperPack: String?
+    public let lowRes: Bool?
+    public let excluded: Bool?
+    public let exclusionReason: String?
+    public let removedLocalImage: Bool?
+    public let removedAt: String?
 
     public init(
         localPath: String,
@@ -158,7 +163,12 @@ public struct WallpaperImage: Decodable, Sendable, Equatable {
         bytes: Int? = nil,
         sha256: String? = nil,
         downloadedFrom: String? = nil,
-        importedFromArtPaperPack: String? = nil
+        importedFromArtPaperPack: String? = nil,
+        lowRes: Bool? = nil,
+        excluded: Bool? = nil,
+        exclusionReason: String? = nil,
+        removedLocalImage: Bool? = nil,
+        removedAt: String? = nil
     ) {
         self.localPath = localPath
         self.fallbackUrls = fallbackUrls
@@ -168,5 +178,10 @@ public struct WallpaperImage: Decodable, Sendable, Equatable {
         self.sha256 = sha256
         self.downloadedFrom = downloadedFrom
         self.importedFromArtPaperPack = importedFromArtPaperPack
+        self.lowRes = lowRes
+        self.excluded = excluded
+        self.exclusionReason = exclusionReason
+        self.removedLocalImage = removedLocalImage
+        self.removedAt = removedAt
     }
 }
