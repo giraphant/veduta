@@ -84,6 +84,7 @@ public struct Artwork: Decodable, Sendable, Equatable {
     public let sources: ArtworkSources
     public let rights: ArtworkRights
     public let images: ArtworkImages
+    public let classification: ArtworkClassification?
 
     public init(
         id: String,
@@ -92,7 +93,8 @@ public struct Artwork: Decodable, Sendable, Equatable {
         attribution: String,
         sources: ArtworkSources,
         rights: ArtworkRights,
-        images: ArtworkImages
+        images: ArtworkImages,
+        classification: ArtworkClassification? = nil
     ) {
         self.id = id
         self.title = title
@@ -101,6 +103,7 @@ public struct Artwork: Decodable, Sendable, Equatable {
         self.sources = sources
         self.rights = rights
         self.images = images
+        self.classification = classification
     }
 }
 

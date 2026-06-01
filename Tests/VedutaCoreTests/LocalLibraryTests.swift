@@ -61,6 +61,7 @@ final class LocalLibraryTests: XCTestCase {
         XCTAssertEqual(artwork.images.wallpaper.sha256, "abc123")
         XCTAssertEqual(artwork.images.wallpaper.downloadedFrom, "https://example.com/image.jpg")
         XCTAssertEqual(artwork.images.wallpaper.importedFromArtPaperPack, "/Library/Application Support/ArtPaper/Packs/essentials")
+        XCTAssertEqual(artwork.classification?.kind, .flatArt)
         XCTAssertEqual(library.wallpaperURL(for: artwork), root.appendingPathComponent("images/met-dp-1.jpg"))
     }
 
@@ -89,6 +90,106 @@ final class LocalLibraryTests: XCTestCase {
         XCTAssertEqual(downloaded.count, 1)
         XCTAssertEqual(downloaded.first?.0.id, "existing-artwork")
         XCTAssertEqual(downloaded.first?.1, existingFile)
+    }
+
+    func testLoadDownloadedArtworksFiltersByArtworkKinds() throws {
+        let root = try makeTemporaryLibraryRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        try writeCatalog(to: root, artworkCount: 3)
+        try writeCollection(
+            to: root,
+            artworks: [
+                artworkJSON(id: "flat-artwork", localPath: "images/flat.jpg", kind: .flatArt),
+                artworkJSON(id: "photo-artwork", localPath: "images/photo.jpg", kind: .photography),
+                artworkJSON(id: "other-artwork", localPath: "images/other.jpg")
+            ]
+        )
+
+        for path in ["images/flat.jpg", "images/photo.jpg", "images/other.jpg"] {
+            let file = root.appendingPathComponent(path)
+            try FileManager.default.createDirectory(
+                at: file.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            try Data("image".utf8).write(to: file)
+        }
+
+        let library = LocalLibrary(root: root)
+        let flatOnly = try library.loadDownloadedArtworks(enabledArtworkKinds: [.flatArt])
+        let photographyOnly = try library.loadDownloadedArtworks(enabledArtworkKinds: [.photography])
+        let defaultKinds = try library.loadDownloadedArtworks()
+
+        XCTAssertEqual(flatOnly.map { $0.0.id }, ["flat-artwork", "other-artwork"])
+        XCTAssertEqual(photographyOnly.map { $0.0.id }, ["photo-artwork"])
+        XCTAssertEqual(defaultKinds.map { $0.0.id }, ["flat-artwork", "photo-artwork", "other-artwork"])
+    }
+
+    func testLoadDownloadedCollectionsUsesArtworkKindFilter() throws {
+        let root = try makeTemporaryLibraryRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let catalogJSON = """
+        {
+          "schemaVersion": 1,
+          "generatedAt": "2026-05-26T12:00:00Z",
+          "collections": [
+            {
+              "id": "flat-collection",
+              "title": "Flat Collection",
+              "shortName": "Flat",
+              "sourcePackId": 0,
+              "artworkCount": 1,
+              "expectedArtworkCount": 1,
+              "manifest": "collections/flat.json"
+            },
+            {
+              "id": "photo-collection",
+              "title": "Photo Collection",
+              "shortName": "Photo",
+              "sourcePackId": 1,
+              "artworkCount": 1,
+              "expectedArtworkCount": 1,
+              "manifest": "collections/photo.json"
+            }
+          ]
+        }
+        """
+        try catalogJSON.data(using: .utf8)!.write(to: root.appendingPathComponent("catalog.json"))
+        try writeCollection(
+            to: root,
+            manifestName: "flat",
+            id: "flat-collection",
+            title: "Flat Collection",
+            shortName: "Flat",
+            packId: 0,
+            artworks: [artworkJSON(id: "flat-artwork", localPath: "images/flat/existing.jpg", kind: .flatArt)]
+        )
+        try writeCollection(
+            to: root,
+            manifestName: "photo",
+            id: "photo-collection",
+            title: "Photo Collection",
+            shortName: "Photo",
+            packId: 1,
+            artworks: [artworkJSON(id: "photo-artwork", localPath: "images/photo/existing.jpg", kind: .photography)]
+        )
+
+        for path in ["images/flat/existing.jpg", "images/photo/existing.jpg"] {
+            let file = root.appendingPathComponent(path)
+            try FileManager.default.createDirectory(
+                at: file.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            try Data("image".utf8).write(to: file)
+        }
+
+        let library = LocalLibrary(root: root)
+        let flatCollections = try library.loadDownloadedCollections(enabledArtworkKinds: [.flatArt])
+        let photoCollections = try library.loadDownloadedCollections(enabledArtworkKinds: [.photography])
+
+        XCTAssertEqual(flatCollections.map(\.id), ["flat-collection"])
+        XCTAssertEqual(photoCollections.map(\.id), ["photo-collection"])
     }
 
     func testLoadDownloadedCollectionsAndFilteredArtworksUseExistingLocalFiles() throws {
@@ -227,10 +328,14 @@ final class LocalLibraryTests: XCTestCase {
     private func artworkJSON(
         id: String,
         localPath: String,
-        importedFromArtPaperPack: String? = nil
+        importedFromArtPaperPack: String? = nil,
+        kind: ArtworkKind? = .flatArt
     ) -> String {
         let importedField = importedFromArtPaperPack.map {
             #", "importedFromArtPaperPack": "\\#($0)""#
+        } ?? ""
+        let classificationField = kind.map {
+            ",\n              \"classification\": {\n                \"kind\": \"\($0.rawValue)\"\n              }"
         } ?? ""
 
         return """
@@ -249,7 +354,7 @@ final class LocalLibraryTests: XCTestCase {
                 "work": "Public Domain",
                 "reproduction": "CC0",
                 "creditLine": "The Metropolitan Museum of Art"
-              },
+              }\(classificationField),
               "images": {
                 "wallpaper": {
                   "localPath": "\(localPath)",

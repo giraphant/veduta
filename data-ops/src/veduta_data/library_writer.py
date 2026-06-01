@@ -3,6 +3,7 @@ import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
 
+from veduta_data.artwork_kinds import classify_artwork_kind
 from veduta_data.models import SourceLibrary
 
 IMAGE_SUFFIXES = ["s0", "s8192", "s6000", "s5120", "s4096"]
@@ -74,6 +75,9 @@ def write_metadata_library(library: SourceLibrary, library_root: Path) -> None:
                     "work": "public-domain",
                     "reproduction": "faithful-reproduction",
                     "creditLine": f"{artwork.attribution} via Google Arts & Culture",
+                },
+                "classification": {
+                    "kind": classify_artwork_kind(collection.id, artwork.title, artwork.creator),
                 },
                 "images": {
                     "wallpaper": {

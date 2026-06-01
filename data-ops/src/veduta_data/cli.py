@@ -6,10 +6,11 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from veduta_data.artpaper_import import import_artpaper_bundle
+from veduta_data.artwork_kinds import classify_artwork_kind
 from veduta_data.downloader import download_first_working
 from veduta_data.google_arts_dezoom import dezoomify_google_arts
 from veduta_data.installed_packs import default_artpaper_image_root, import_installed_pack_images
-from veduta_data.library_writer import update_wallpaper_metadata, write_metadata_library
+from veduta_data.library_writer import update_wallpaper_metadata, write_json, write_metadata_library
 
 
 def default_library_root() -> Path:
@@ -57,6 +58,36 @@ def unsupported_download_artworks(collection: dict[str, object]) -> list[str]:
         if not fallback_urls or any(not is_http_url(url) for url in fallback_urls):
             unsupported.append(str(artwork["id"]))
     return unsupported
+
+
+def classify_artwork_kinds(args: argparse.Namespace) -> int:
+    library_root = Path(args.library_root).expanduser()
+    catalog = load_catalog(library_root)
+    total_updated = 0
+    processed = 0
+
+    for collection_summary in selected_collections(catalog, args.collection, args.all):
+        processed += 1
+        manifest_path = library_root / str(collection_summary["manifest"])
+        collection = load_collection(library_root, str(collection_summary["manifest"]))
+        updated = 0
+        for artwork in collection["artworks"]:
+            classification = artwork.setdefault("classification", {})
+            kind = classify_artwork_kind(
+                str(collection["id"]),
+                str(artwork.get("title", "")),
+                str(artwork.get("creator", "")),
+            )
+            if classification.get("kind") != kind:
+                classification["kind"] = kind
+                updated += 1
+        if updated:
+            write_json(manifest_path, collection)
+        total_updated += updated
+        print(f"{collection['id']}: {updated} artwork classification(s) updated")
+
+    print(f"Updated {total_updated} artwork classification(s) in {processed} collection(s)")
+    return 0
 
 
 def download(args: argparse.Namespace) -> int:
@@ -204,6 +235,12 @@ def build_parser() -> argparse.ArgumentParser:
     import_parser.add_argument("--artpaper-app", default="/Applications/Artpaper.app")
     import_parser.add_argument("--library-root", default=str(default_library_root()))
     import_parser.set_defaults(func=import_metadata)
+
+    classify_parser = subcommands.add_parser("classify-artwork-kinds")
+    classify_parser.add_argument("--library-root", default=str(default_library_root()))
+    classify_parser.add_argument("--collection")
+    classify_parser.add_argument("--all", action="store_true")
+    classify_parser.set_defaults(func=classify_artwork_kinds)
 
     download_parser = subcommands.add_parser("download")
     download_parser.add_argument("--library-root", default=str(default_library_root()))
