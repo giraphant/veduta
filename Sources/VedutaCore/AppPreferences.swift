@@ -3,6 +3,7 @@ import Foundation
 public final class AppPreferences {
     public enum Keys {
         public static let enabledCollectionIDs = "enabledCollectionIDs"
+        public static let enabledArtworkKinds = "enabledArtworkKinds"
         public static let rotationIntervalSeconds = "rotationIntervalSeconds"
         public static let showMenuBarIcon = "showMenuBarIcon"
         public static let showDockIcon = "showDockIcon"
@@ -19,6 +20,16 @@ public final class AppPreferences {
     public var enabledCollectionIDs: Set<String> {
         get { Set(defaults.stringArray(forKey: Keys.enabledCollectionIDs) ?? []) }
         set { defaults.set(Array(newValue).sorted(), forKey: Keys.enabledCollectionIDs) }
+    }
+
+    public var enabledArtworkKinds: Set<ArtworkKind> {
+        get {
+            guard let rawValues = defaults.stringArray(forKey: Keys.enabledArtworkKinds) else {
+                return Set(ArtworkKind.allCases)
+            }
+            return Set(rawValues.compactMap(ArtworkKind.init(rawValue:)))
+        }
+        set { defaults.set(newValue.map(\.rawValue).sorted(), forKey: Keys.enabledArtworkKinds) }
     }
 
     public var rotationIntervalSeconds: TimeInterval? {

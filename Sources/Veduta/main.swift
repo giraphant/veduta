@@ -8,6 +8,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SettingsWindowControll
     private var collectionSummaries: [CollectionSummary] = []
     private var statusMessage = "Ready"
     private var enabledCollectionIDs = Set<String>()
+    private var enabledArtworkKinds = Set(ArtworkKind.allCases)
     private var rotationIntervalSeconds: TimeInterval? = AppPreferences.defaultRotationIntervalSeconds
     private let preferences = AppPreferences()
     private let picker = RandomArtworkPicker()
@@ -72,6 +73,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SettingsWindowControll
             collectionsItem.submenu = collectionsMenu()
             menu.addItem(collectionsItem)
         }
+
+        let artworkKindsItem = NSMenuItem(title: "Artwork Types", action: nil, keyEquivalent: "")
+        artworkKindsItem.submenu = artworkKindsMenu()
+        menu.addItem(artworkKindsItem)
 
         let rotationItem = NSMenuItem(title: "Rotation Interval", action: nil, keyEquivalent: "")
         rotationItem.submenu = rotationIntervalMenu()
@@ -160,6 +165,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SettingsWindowControll
         return menu
     }
 
+    private func artworkKindsMenu() -> NSMenu {
+        let menu = NSMenu()
+        for kind in ArtworkKind.allCases {
+            let item = NSMenuItem(title: kind.displayName, action: #selector(toggleArtworkKind(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = kind.rawValue
+            item.state = enabledArtworkKinds.contains(kind) ? .on : .off
+            item.isEnabled = !enabledArtworkKinds.contains(kind) || enabledArtworkKinds.count > 1
+            menu.addItem(item)
+        }
+        return menu
+    }
+
     private func rotationIntervalMenu() -> NSMenu {
         let menu = NSMenu()
         for option in rotationIntervalOptions {
@@ -216,13 +234,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SettingsWindowControll
             enabledCollectionIDs.insert(collectionID)
         }
         saveEnabledCollectionIDs()
-        rotateWallpaper()
+        rebuildMenu(message: "Ready")
+        updateSettingsWindow()
+    }
+
+    @objc private func toggleArtworkKind(_ sender: NSMenuItem) {
+        guard let rawValue = sender.representedObject as? String,
+              let kind = ArtworkKind(rawValue: rawValue)
+        else { return }
+        if enabledArtworkKinds.contains(kind) {
+            guard enabledArtworkKinds.count > 1 else { return }
+            enabledArtworkKinds.remove(kind)
+        } else {
+            enabledArtworkKinds.insert(kind)
+        }
+        saveEnabledArtworkKinds()
+        rebuildMenu(message: "Ready")
+        updateSettingsWindow()
     }
 
     private func rotateWallpaper() {
         do {
             try refreshDownloadedCollections()
-            let artworks = try library.loadDownloadedArtworks(collectionIDs: enabledCollectionIDs)
+            let artworks = try library.loadDownloadedArtworks(
+                collectionIDs: enabledCollectionIDs,
+                enabledArtworkKinds: enabledArtworkKinds
+            )
             let selected = try picker.pick(count: max(NSScreen.screens.count, 1), from: artworks)
             try wallpaperService.setWallpapers(imageURLs: selected.map { $0.1 })
             currentSelections = selected.map { (artwork: $0.0, imageURL: $0.1) }
@@ -277,6 +314,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SettingsWindowControll
                     isToggleEnabled: collectionSummaries.count > 1 && (!isEnabled || enabledCollectionIDs.count > 1)
                 )
             },
+            artworkKinds: ArtworkKind.allCases.map { kind in
+                let isEnabled = enabledArtworkKinds.contains(kind)
+                return SettingsArtworkKindOption(
+                    id: kind.rawValue,
+                    title: kind.displayName,
+                    isEnabled: isEnabled,
+                    isToggleEnabled: !isEnabled || enabledArtworkKinds.count > 1
+                )
+            },
             currentArtworkTitle: currentSelections.first?.artwork.title,
             currentArtworkCreator: currentSelections.first?.artwork.creator,
             statusMessage: statusMessage,
@@ -287,11 +333,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SettingsWindowControll
 
     private func loadPreferences() {
         enabledCollectionIDs = preferences.enabledCollectionIDs
+        enabledArtworkKinds = preferences.enabledArtworkKinds
         rotationIntervalSeconds = preferences.rotationIntervalSeconds
     }
 
     private func saveEnabledCollectionIDs() {
         preferences.enabledCollectionIDs = enabledCollectionIDs
+    }
+
+    private func saveEnabledArtworkKinds() {
+        preferences.enabledArtworkKinds = enabledArtworkKinds
     }
 
     private func saveRotationInterval() {
@@ -339,7 +390,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SettingsWindowControll
             enabledCollectionIDs.remove(collectionID)
         }
         saveEnabledCollectionIDs()
-        rotateWallpaper()
+        rebuildMenu(message: "Ready")
+        updateSettingsWindow()
+    }
+
+    func settingsWindowController(_ controller: SettingsWindowController, didSetArtworkKind kind: ArtworkKind, isEnabled: Bool) {
+        if isEnabled {
+            enabledArtworkKinds.insert(kind)
+        } else {
+            guard enabledArtworkKinds.count > 1 else {
+                updateSettingsWindow()
+                return
+            }
+            enabledArtworkKinds.remove(kind)
+        }
+        saveEnabledArtworkKinds()
+        rebuildMenu(message: "Ready")
+        updateSettingsWindow()
     }
 
     func settingsWindowControllerDidRequestNextWallpaper(_ controller: SettingsWindowController) {

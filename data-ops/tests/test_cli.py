@@ -36,6 +36,32 @@ def write_library(
     }), encoding="utf-8")
 
 
+def test_classify_artwork_kinds_updates_selected_collection(tmp_path):
+    write_library(tmp_path, ["flat"])
+    catalog_path = tmp_path / "catalog.json"
+    catalog = json.loads(catalog_path.read_text(encoding="utf-8"))
+    catalog["collections"].append({"id": "graffitimundo", "manifest": "collections/graffitimundo.json"})
+    catalog_path.write_text(json.dumps(catalog), encoding="utf-8")
+    (tmp_path / "collections" / "graffitimundo.json").write_text(json.dumps({
+        "id": "graffitimundo",
+        "artworks": [{
+            "id": "mural",
+            "title": "Untitled",
+            "creator": "Blu",
+            "images": {"wallpaper": {"localPath": "images/graffitimundo/mural.jpg", "fallbackUrls": []}},
+            "sources": {"canonicalPage": "https://example.com/mural"},
+        }],
+    }), encoding="utf-8")
+
+    result = cli.main(["classify-artwork-kinds", "--library-root", str(tmp_path), "--collection", "graffitimundo"])
+
+    assert result == 0
+    flat_collection = json.loads((tmp_path / "collections" / "essentials.json").read_text(encoding="utf-8"))
+    street_collection = json.loads((tmp_path / "collections" / "graffitimundo.json").read_text(encoding="utf-8"))
+    assert "classification" not in flat_collection["artworks"][0]
+    assert street_collection["artworks"][0]["classification"] == {"kind": "street-art"}
+
+
 def test_download_returns_failure_when_any_artwork_fails_and_writes_current_failure(tmp_path, monkeypatch):
     write_library(tmp_path, ["success", "failure"])
     calls = []

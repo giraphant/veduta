@@ -1,6 +1,7 @@
 import AppKit
 import Foundation
 import SwiftUI
+import VedutaCore
 
 struct SettingsRotationOption: Identifiable, Equatable {
     let id: String
@@ -21,12 +22,20 @@ struct SettingsCollectionOption: Identifiable, Equatable {
     let isToggleEnabled: Bool
 }
 
+struct SettingsArtworkKindOption: Identifiable, Equatable {
+    let id: String
+    let title: String
+    let isEnabled: Bool
+    let isToggleEnabled: Bool
+}
+
 struct SettingsSnapshot: Equatable {
     let showMenuBarIcon: Bool
     let showDockIcon: Bool
     let rotationIntervalSeconds: TimeInterval?
     let rotationOptions: [SettingsRotationOption]
     let collections: [SettingsCollectionOption]
+    let artworkKinds: [SettingsArtworkKindOption]
     let currentArtworkTitle: String?
     let currentArtworkCreator: String?
     let statusMessage: String
@@ -39,6 +48,7 @@ struct SettingsSnapshot: Equatable {
         rotationIntervalSeconds: 30 * 60,
         rotationOptions: [],
         collections: [],
+        artworkKinds: [],
         currentArtworkTitle: nil,
         currentArtworkCreator: nil,
         statusMessage: "Ready",
@@ -52,6 +62,7 @@ protocol SettingsWindowControllerDelegate: AnyObject {
     func settingsWindowController(_ controller: SettingsWindowController, didChangeDockIconVisibility isVisible: Bool)
     func settingsWindowController(_ controller: SettingsWindowController, didChangeRotationInterval seconds: TimeInterval?)
     func settingsWindowController(_ controller: SettingsWindowController, didSetCollection collectionID: String, isEnabled: Bool)
+    func settingsWindowController(_ controller: SettingsWindowController, didSetArtworkKind kind: ArtworkKind, isEnabled: Bool)
     func settingsWindowControllerDidRequestNextWallpaper(_ controller: SettingsWindowController)
     func settingsWindowControllerDidRequestOpenLibraryFolder(_ controller: SettingsWindowController)
     func settingsWindowControllerDidRequestQuit(_ controller: SettingsWindowController)
@@ -61,6 +72,7 @@ private enum SettingsPane: String, CaseIterable, Identifiable, Hashable {
     case wallpaper
     case settings
     case collections
+    case artworkTypes
     case library
     case about
 
@@ -71,6 +83,7 @@ private enum SettingsPane: String, CaseIterable, Identifiable, Hashable {
         case .wallpaper: "Wallpaper"
         case .settings: "Settings"
         case .collections: "Collections"
+        case .artworkTypes: "Artwork Types"
         case .library: "Library"
         case .about: "About"
         }
@@ -81,6 +94,7 @@ private enum SettingsPane: String, CaseIterable, Identifiable, Hashable {
         case .wallpaper: "photo.on.rectangle"
         case .settings: "gearshape"
         case .collections: "square.grid.2x2"
+        case .artworkTypes: "paintpalette"
         case .library: "folder"
         case .about: "info.circle"
         }
@@ -150,6 +164,10 @@ final class SettingsWindowController: NSWindowController {
                 guard let self else { return }
                 self.delegate?.settingsWindowController(self, didSetCollection: collectionID, isEnabled: isEnabled)
             },
+            onArtworkKindChanged: { [weak self] kind, isEnabled in
+                guard let self else { return }
+                self.delegate?.settingsWindowController(self, didSetArtworkKind: kind, isEnabled: isEnabled)
+            },
             onNextWallpaper: { [weak self] in
                 guard let self else { return }
                 self.delegate?.settingsWindowControllerDidRequestNextWallpaper(self)
@@ -173,6 +191,7 @@ private struct SettingsView: View {
     let onDockChanged: (Bool) -> Void
     let onRotationChanged: (TimeInterval?) -> Void
     let onCollectionChanged: (String, Bool) -> Void
+    let onArtworkKindChanged: (ArtworkKind, Bool) -> Void
     let onNextWallpaper: () -> Void
     let onOpenLibraryFolder: () -> Void
     let onQuit: () -> Void
@@ -187,6 +206,7 @@ private struct SettingsView: View {
         onDockChanged: @escaping (Bool) -> Void,
         onRotationChanged: @escaping (TimeInterval?) -> Void,
         onCollectionChanged: @escaping (String, Bool) -> Void,
+        onArtworkKindChanged: @escaping (ArtworkKind, Bool) -> Void,
         onNextWallpaper: @escaping () -> Void,
         onOpenLibraryFolder: @escaping () -> Void,
         onQuit: @escaping () -> Void
@@ -197,6 +217,7 @@ private struct SettingsView: View {
         self.onDockChanged = onDockChanged
         self.onRotationChanged = onRotationChanged
         self.onCollectionChanged = onCollectionChanged
+        self.onArtworkKindChanged = onArtworkKindChanged
         self.onNextWallpaper = onNextWallpaper
         self.onOpenLibraryFolder = onOpenLibraryFolder
         self.onQuit = onQuit
@@ -231,6 +252,8 @@ private struct SettingsView: View {
             settingsPane
         case .collections:
             collectionsPane
+        case .artworkTypes:
+            artworkTypesPane
         case .library:
             libraryPane
         case .about:
@@ -325,6 +348,30 @@ private struct SettingsView: View {
                                 .font(.footnote)
                                 .foregroundStyle(.secondary)
                         }
+                    }
+                }
+            }
+        }
+        .formStyle(.grouped)
+    }
+
+    private var artworkTypesPane: some View {
+        Form {
+            Section("Artwork Types") {
+                ForEach(snapshot.artworkKinds) { kind in
+                    Toggle(kind.title, isOn: Binding(
+                        get: { kind.isEnabled },
+                        set: { value in
+                            guard let artworkKind = ArtworkKind(rawValue: kind.id) else { return }
+                            onArtworkKindChanged(artworkKind, value)
+                        }
+                    ))
+                    .disabled(!kind.isToggleEnabled)
+
+                    if !kind.isToggleEnabled {
+                        Text("At least one artwork type must stay enabled.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
                     }
                 }
             }

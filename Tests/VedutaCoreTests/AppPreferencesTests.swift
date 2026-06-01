@@ -26,6 +26,7 @@ final class AppPreferencesTests: XCTestCase {
         XCTAssertFalse(preferences.showDockIcon)
         XCTAssertEqual(preferences.rotationIntervalSeconds, 30 * 60)
         XCTAssertTrue(preferences.enabledCollectionIDs.isEmpty)
+        XCTAssertEqual(preferences.enabledArtworkKinds, Set(ArtworkKind.allCases))
     }
 
     func testPersistsVisibilityAndWallpaperPreferences() {
@@ -34,11 +35,13 @@ final class AppPreferencesTests: XCTestCase {
         preferences.showDockIcon = true
         preferences.rotationIntervalSeconds = nil
         preferences.enabledCollectionIDs = ["rijksmuseum", "essentials"]
+        preferences.enabledArtworkKinds = [.flatArt, .streetArt]
 
         preferences = AppPreferences(defaults: defaults)
         XCTAssertFalse(preferences.showMenuBarIcon)
         XCTAssertTrue(preferences.showDockIcon)
         XCTAssertNil(preferences.rotationIntervalSeconds)
         XCTAssertEqual(preferences.enabledCollectionIDs, ["essentials", "rijksmuseum"])
+        XCTAssertEqual(preferences.enabledArtworkKinds, [.flatArt, .streetArt])
     }
 }

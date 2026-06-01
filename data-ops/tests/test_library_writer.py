@@ -7,10 +7,10 @@ from veduta_data.library_writer import update_wallpaper_metadata, write_json, wr
 from veduta_data.models import SourceArtwork, SourceCollection, SourceLibrary
 
 
-def sample_library() -> SourceLibrary:
+def sample_library(collection_id: str = "essentials", title: str = "Title", creator: str = "Artist") -> SourceLibrary:
     return SourceLibrary(collections=[
         SourceCollection(
-            id="essentials",
+            id=collection_id,
             source_pack_id=0,
             short_name="Essentials",
             title="Essentials Set",
@@ -20,8 +20,8 @@ def sample_library() -> SourceLibrary:
             artworks=[
                 SourceArtwork(
                     id="artist-title",
-                    title="Title",
-                    creator="Artist",
+                    title=title,
+                    creator=creator,
                     attribution="Museum",
                     canonical_page="https://artsandculture.google.com/asset/example",
                     artist_page="https://example.com/artist",
@@ -45,6 +45,7 @@ def test_write_metadata_library_creates_catalog_and_collection_manifest(tmp_path
     collection = json.loads((tmp_path / "collections" / "essentials.json").read_text(encoding="utf-8"))
     assert collection["schemaVersion"] == 1
     assert collection["id"] == "essentials"
+    assert collection["artworks"][0]["classification"] == {"kind": "flat-art"}
     assert collection["artworks"][0]["images"]["wallpaper"]["localPath"] == "images/essentials/artist-title.jpg"
     assert collection["artworks"][0]["images"]["wallpaper"]["fallbackUrls"] == [
         "https://lh6.ggpht.com/example=s0",
@@ -53,6 +54,29 @@ def test_write_metadata_library_creates_catalog_and_collection_manifest(tmp_path
         "https://lh6.ggpht.com/example=s5120",
         "https://lh6.ggpht.com/example=s4096",
     ]
+
+
+def test_write_metadata_library_classifies_obvious_non_flat_artwork(tmp_path):
+    write_metadata_library(
+        sample_library(collection_id="graffitimundo", title="Untitled", creator="Blu"),
+        tmp_path / "street",
+    )
+    write_metadata_library(
+        sample_library(title="J.T. Marshall, Houston, Texas", creator="Lewis Wickes Hine"),
+        tmp_path / "photo",
+    )
+    write_metadata_library(
+        sample_library(title="Wall Fragment from the Tomb of Thenti", creator="Egyptian"),
+        tmp_path / "object",
+    )
+
+    street = json.loads((tmp_path / "street" / "collections" / "graffitimundo.json").read_text(encoding="utf-8"))
+    photo = json.loads((tmp_path / "photo" / "collections" / "essentials.json").read_text(encoding="utf-8"))
+    object_manifest = json.loads((tmp_path / "object" / "collections" / "essentials.json").read_text(encoding="utf-8"))
+
+    assert street["artworks"][0]["classification"] == {"kind": "street-art"}
+    assert photo["artworks"][0]["classification"] == {"kind": "photography"}
+    assert object_manifest["artworks"][0]["classification"] == {"kind": "object-or-document"}
 
 
 def test_write_json_leaves_existing_file_intact_if_replace_fails(tmp_path, monkeypatch):
