@@ -10,7 +10,17 @@ The name comes from *veduta* — the 18th-century genre of highly detailed view 
 
 Veduta is inspired by [ArtPaper](https://gikken.co/artpaper/) by Gikken — it grew out of wanting that experience as an open-source, local-first app.
 
-Right now Veduta is two things: a local data pipeline that builds an artwork library on your machine, and a minimal menu-bar app that rotates wallpapers from it. Hosting, sync, and a packaged release come later.
+Right now Veduta is two things: a local data pipeline that builds an artwork library on your machine, and a minimal menu-bar app that rotates wallpapers from it. Hosting and sync come later.
+
+## Install
+
+The menu-bar app ships as a signed + notarized DMG via [Homebrew](https://brew.sh):
+
+```sh
+brew install --cask giraphant/tap/veduta
+```
+
+Veduta reads wallpapers from a library you build locally under `~/Pictures/VedutaLibrary/` — see [How it works](#how-it-works) and the data-pipeline commands below.
 
 ## How it works
 
@@ -59,7 +69,7 @@ make run-app                     # run the menu-bar app
 2. **Menu-bar app** — read the local library, pick a random artwork, set it as wallpaper, basic controls. *(done)*
 3. **Better local app** — intervals, collection filters, favorites, artwork details, launch at login.
 4. **Self-hosted mirror** — export CDN-ready manifests and images, serve from a static origin, keep upstream fallback and provenance.
-5. **Public release** — app bundle, icon, signing, notarization, GitHub Releases.
+5. **Public release** — app bundle, icon, signing, notarization, GitHub Releases. *(done)*
 
 ## License
 
