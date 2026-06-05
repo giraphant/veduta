@@ -12,6 +12,7 @@ class SourceArtwork:
     upstream_image_base: str
     source_pack_id: int
     source_index: int
+    metadata: dict[str, object] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)

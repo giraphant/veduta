@@ -4,7 +4,7 @@
 
 **Goal:** Build a local-first Veduta prototype that imports ArtPaper's 16 bundled collection manifests, downloads the highest practical artwork images to a local library, and runs a minimal macOS menu-bar app that rotates wallpapers from that local library.
 
-**Architecture:** A Python `data-ops` CLI owns ingestion: it reads the local ArtPaper.app bundle, normalizes metadata, downloads images, and writes a self-contained library under `~/Pictures/VedutaLibrary`. A Swift package owns the client: `VedutaCore` loads local manifests and chooses wallpapers, while the `Veduta` executable is a lightweight AppKit menu-bar app. CDN/mirror publishing is intentionally deferred until the local library and client are stable; the schema already separates upstream source URLs from local/mirror image paths.
+**Architecture:** A Python `data` CLI owns ingestion: it reads the local ArtPaper.app bundle, normalizes metadata, downloads images, and writes a self-contained library under `~/Pictures/VedutaLibrary`. A Swift package owns the client: `VedutaCore` loads local manifests and chooses wallpapers, while the `Veduta` executable is a lightweight AppKit menu-bar app. CDN/mirror publishing is intentionally deferred until the local library and client are stable; the schema already separates upstream source URLs from local/mirror image paths.
 
 **Tech Stack:** Python 3.11+ stdlib + pytest for data operations; Swift 5.9+ / macOS 13+ / AppKit / Foundation / XCTest for the client; `sips` for local image dimension inspection; GitHub-flavored Markdown for project roadmap docs.
 
@@ -46,7 +46,7 @@ veduta/
 ├── Makefile
 ├── README.md
 ├── Package.swift
-├── data-ops/
+├── data/
 │   ├── pyproject.toml
 │   ├── src/veduta_data/
 │   │   ├── __init__.py
@@ -99,8 +99,8 @@ The repo may use `VEDUTA_LIBRARY_DIR` for tests and development, but production 
 **Files:**
 - Create: `.gitignore`
 - Create: `Makefile`
-- Create: `data-ops/pyproject.toml`
-- Create: `data-ops/src/veduta_data/__init__.py`
+- Create: `data/pyproject.toml`
+- Create: `data/src/veduta_data/__init__.py`
 
 - [ ] **Step 1: Create `.gitignore`**
 
@@ -121,7 +121,7 @@ data/library/
 *.partial
 ```
 
-- [ ] **Step 2: Create `data-ops/pyproject.toml`**
+- [ ] **Step 2: Create `data/pyproject.toml`**
 
 ```toml
 [project]
@@ -146,7 +146,7 @@ testpaths = ["tests"]
 pythonpath = ["src"]
 ```
 
-- [ ] **Step 3: Create `data-ops/src/veduta_data/__init__.py`**
+- [ ] **Step 3: Create `data/src/veduta_data/__init__.py`**
 
 ```python
 __all__ = []
@@ -157,12 +157,12 @@ __all__ = []
 ```makefile
 ARTPAPER_APP ?= /Applications/Artpaper.app
 LIBRARY_ROOT ?= $(HOME)/Pictures/VedutaLibrary
-PYTHONPATH := data-ops/src
+PYTHONPATH := data/src
 
 .PHONY: test-data test-swift test import-metadata download-essentials download-all run-app
 
 test-data:
-	cd data-ops && python3 -m pytest -q
+	cd data && python3 -m pytest -q
 
 test-swift:
 	swift test
@@ -170,13 +170,13 @@ test-swift:
 test: test-data test-swift
 
 import-metadata:
-	cd data-ops && PYTHONPATH=src python3 -m veduta_data.cli import-metadata --artpaper-app "$(ARTPAPER_APP)" --library-root "$(LIBRARY_ROOT)"
+	cd data && PYTHONPATH=src python3 -m veduta_data.cli import-metadata --artpaper-app "$(ARTPAPER_APP)" --library-root "$(LIBRARY_ROOT)"
 
 download-essentials:
-	cd data-ops && PYTHONPATH=src python3 -m veduta_data.cli download --library-root "$(LIBRARY_ROOT)" --collection essentials --delay 1.0
+	cd data && PYTHONPATH=src python3 -m veduta_data.cli download --library-root "$(LIBRARY_ROOT)" --collection essentials --delay 1.0
 
 download-all:
-	cd data-ops && PYTHONPATH=src python3 -m veduta_data.cli download --library-root "$(LIBRARY_ROOT)" --all --delay 1.0
+	cd data && PYTHONPATH=src python3 -m veduta_data.cli download --library-root "$(LIBRARY_ROOT)" --all --delay 1.0
 
 run-app:
 	VEDUTA_LIBRARY_DIR="$(LIBRARY_ROOT)" swift run Veduta
@@ -211,7 +211,7 @@ error: Could not find Package.swift in this directory or any of its parent direc
 - [ ] **Step 6: Commit scaffolding**
 
 ```bash
-git add .gitignore Makefile data-ops/pyproject.toml data-ops/src/veduta_data/__init__.py
+git add .gitignore Makefile data/pyproject.toml data/src/veduta_data/__init__.py
 git commit -m "chore: scaffold local-first project"
 ```
 
@@ -220,13 +220,13 @@ git commit -m "chore: scaffold local-first project"
 ## Task 2: Data models and ArtPaper bundle importer
 
 **Files:**
-- Create: `data-ops/src/veduta_data/models.py`
-- Create: `data-ops/src/veduta_data/artpaper_import.py`
-- Test: `data-ops/tests/test_artpaper_import.py`
+- Create: `data/src/veduta_data/models.py`
+- Create: `data/src/veduta_data/artpaper_import.py`
+- Test: `data/tests/test_artpaper_import.py`
 
 - [ ] **Step 1: Write failing importer tests**
 
-Create `data-ops/tests/test_artpaper_import.py`:
+Create `data/tests/test_artpaper_import.py`:
 
 ```python
 import json
@@ -297,7 +297,7 @@ def test_import_artpaper_bundle_reads_packages_and_collection_json(tmp_path):
 Run:
 
 ```bash
-cd data-ops && python3 -m pytest tests/test_artpaper_import.py -q
+cd data && python3 -m pytest tests/test_artpaper_import.py -q
 ```
 
 Expected:
@@ -308,7 +308,7 @@ ModuleNotFoundError: No module named 'veduta_data.artpaper_import'
 
 - [ ] **Step 3: Implement models**
 
-Create `data-ops/src/veduta_data/models.py`:
+Create `data/src/veduta_data/models.py`:
 
 ```python
 from dataclasses import dataclass, field
@@ -346,7 +346,7 @@ class SourceLibrary:
 
 - [ ] **Step 4: Implement ArtPaper importer**
 
-Create `data-ops/src/veduta_data/artpaper_import.py`:
+Create `data/src/veduta_data/artpaper_import.py`:
 
 ```python
 import json
@@ -439,7 +439,7 @@ def import_artpaper_bundle(app_path: Path) -> SourceLibrary:
 Run:
 
 ```bash
-cd data-ops && python3 -m pytest tests/test_artpaper_import.py -q
+cd data && python3 -m pytest tests/test_artpaper_import.py -q
 ```
 
 Expected:
@@ -451,7 +451,7 @@ Expected:
 - [ ] **Step 6: Commit importer**
 
 ```bash
-git add data-ops/src/veduta_data/models.py data-ops/src/veduta_data/artpaper_import.py data-ops/tests/test_artpaper_import.py
+git add data/src/veduta_data/models.py data/src/veduta_data/artpaper_import.py data/tests/test_artpaper_import.py
 git commit -m "feat: import ArtPaper bundle metadata"
 ```
 
@@ -460,12 +460,12 @@ git commit -m "feat: import ArtPaper bundle metadata"
 ## Task 3: Normalized local library writer
 
 **Files:**
-- Create: `data-ops/src/veduta_data/library_writer.py`
-- Test: `data-ops/tests/test_library_writer.py`
+- Create: `data/src/veduta_data/library_writer.py`
+- Test: `data/tests/test_library_writer.py`
 
 - [ ] **Step 1: Write failing library writer tests**
 
-Create `data-ops/tests/test_library_writer.py`:
+Create `data/tests/test_library_writer.py`:
 
 ```python
 import json
@@ -528,7 +528,7 @@ def test_write_metadata_library_creates_catalog_and_collection_manifest(tmp_path
 Run:
 
 ```bash
-cd data-ops && python3 -m pytest tests/test_library_writer.py -q
+cd data && python3 -m pytest tests/test_library_writer.py -q
 ```
 
 Expected:
@@ -539,7 +539,7 @@ ModuleNotFoundError: No module named 'veduta_data.library_writer'
 
 - [ ] **Step 3: Implement library writer**
 
-Create `data-ops/src/veduta_data/library_writer.py`:
+Create `data/src/veduta_data/library_writer.py`:
 
 ```python
 import json
@@ -637,7 +637,7 @@ def write_metadata_library(library: SourceLibrary, library_root: Path) -> None:
 Run:
 
 ```bash
-cd data-ops && python3 -m pytest tests/test_library_writer.py -q
+cd data && python3 -m pytest tests/test_library_writer.py -q
 ```
 
 Expected:
@@ -649,7 +649,7 @@ Expected:
 - [ ] **Step 5: Commit library writer**
 
 ```bash
-git add data-ops/src/veduta_data/library_writer.py data-ops/tests/test_library_writer.py
+git add data/src/veduta_data/library_writer.py data/tests/test_library_writer.py
 git commit -m "feat: write local library manifests"
 ```
 
@@ -658,12 +658,12 @@ git commit -m "feat: write local library manifests"
 ## Task 4: High-resolution image downloader
 
 **Files:**
-- Create: `data-ops/src/veduta_data/downloader.py`
-- Test: `data-ops/tests/test_downloader.py`
+- Create: `data/src/veduta_data/downloader.py`
+- Test: `data/tests/test_downloader.py`
 
 - [ ] **Step 1: Write failing downloader tests**
 
-Create `data-ops/tests/test_downloader.py`:
+Create `data/tests/test_downloader.py`:
 
 ```python
 import hashlib
@@ -695,7 +695,7 @@ def test_sha256_file_hashes_file_contents(tmp_path):
 Run:
 
 ```bash
-cd data-ops && python3 -m pytest tests/test_downloader.py -q
+cd data && python3 -m pytest tests/test_downloader.py -q
 ```
 
 Expected:
@@ -706,7 +706,7 @@ ModuleNotFoundError: No module named 'veduta_data.downloader'
 
 - [ ] **Step 3: Implement downloader utilities**
 
-Create `data-ops/src/veduta_data/downloader.py`:
+Create `data/src/veduta_data/downloader.py`:
 
 ```python
 import hashlib
@@ -813,7 +813,7 @@ def download_first_working(candidates: list[str], destination: Path, delay_secon
 Run:
 
 ```bash
-cd data-ops && python3 -m pytest tests/test_downloader.py -q
+cd data && python3 -m pytest tests/test_downloader.py -q
 ```
 
 Expected:
@@ -825,7 +825,7 @@ Expected:
 - [ ] **Step 5: Commit downloader utilities**
 
 ```bash
-git add data-ops/src/veduta_data/downloader.py data-ops/tests/test_downloader.py
+git add data/src/veduta_data/downloader.py data/tests/test_downloader.py
 git commit -m "feat: add resumable image downloader"
 ```
 
@@ -834,13 +834,13 @@ git commit -m "feat: add resumable image downloader"
 ## Task 5: Data-ops CLI
 
 **Files:**
-- Create: `data-ops/src/veduta_data/cli.py`
-- Modify: `data-ops/src/veduta_data/library_writer.py`
-- Test: `data-ops/tests/test_library_writer.py`
+- Create: `data/src/veduta_data/cli.py`
+- Modify: `data/src/veduta_data/library_writer.py`
+- Test: `data/tests/test_library_writer.py`
 
 - [ ] **Step 1: Extend library writer to persist image metadata**
 
-Modify `data-ops/src/veduta_data/library_writer.py` by adding this function below `write_metadata_library`:
+Modify `data/src/veduta_data/library_writer.py` by adding this function below `write_metadata_library`:
 
 ```python
 
@@ -859,7 +859,7 @@ def update_wallpaper_metadata(collection_manifest_path: Path, artwork_id: str, m
 
 - [ ] **Step 2: Add a failing test for image metadata updates**
 
-Append to `data-ops/tests/test_library_writer.py`:
+Append to `data/tests/test_library_writer.py`:
 
 ```python
 from veduta_data.library_writer import update_wallpaper_metadata
@@ -891,7 +891,7 @@ def test_update_wallpaper_metadata_updates_matching_artwork(tmp_path):
 Run:
 
 ```bash
-cd data-ops && python3 -m pytest tests/test_library_writer.py::test_update_wallpaper_metadata_updates_matching_artwork -q
+cd data && python3 -m pytest tests/test_library_writer.py::test_update_wallpaper_metadata_updates_matching_artwork -q
 ```
 
 Expected:
@@ -902,7 +902,7 @@ Expected:
 
 - [ ] **Step 4: Implement CLI**
 
-Create `data-ops/src/veduta_data/cli.py`:
+Create `data/src/veduta_data/cli.py`:
 
 ```python
 import argparse
@@ -1085,7 +1085,7 @@ uffizi
 - [ ] **Step 8: Commit CLI**
 
 ```bash
-git add data-ops/src/veduta_data/cli.py data-ops/src/veduta_data/library_writer.py data-ops/tests/test_library_writer.py
+git add data/src/veduta_data/cli.py data/src/veduta_data/library_writer.py data/tests/test_library_writer.py
 git commit -m "feat: add local data pipeline CLI"
 ```
 
@@ -1177,7 +1177,7 @@ Do not commit the downloaded images. Commit only code changes from prior tasks i
 
 ```bash
 git status --short
-git add data-ops/src/veduta_data data-ops/tests Makefile .gitignore
+git add data/src/veduta_data data/tests Makefile .gitignore
 git commit -m "chore: verify essentials data pipeline"
 ```
 
@@ -1995,7 +1995,7 @@ git status --short
 If no source files changed, do not commit. If README or scripts were adjusted during verification, commit those exact files:
 
 ```bash
-git add README.md Makefile data-ops/src/veduta_data Sources Tests
+git add README.md Makefile data/src/veduta_data Sources Tests
 git commit -m "chore: complete local-first verification"
 ```
 

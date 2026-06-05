@@ -1,4 +1,8 @@
-# Veduta
+<p align="center">
+  <img src="Assets/icon.png" width="128" alt="Veduta logo">
+</p>
+
+<h1 align="center">Veduta</h1>
 
 A local-first, open-source macOS wallpaper app for public-domain and museum artwork.
 
@@ -28,12 +32,21 @@ Downloaded artwork and generated library files are never committed.
 - Python 3.11+
 - ArtPaper installed at `/Applications/Artpaper.app` (used only for the initial metadata import)
 - Optional: the installed ArtPaper 5K pack, for high-resolution Essentials
+- Optional: `HARVARD_ART_MUSEUMS_API_KEY`, for importing Harvard Art Museums records
 
 ## Commands
 
 ```sh
 make import-metadata             # import metadata from the local ArtPaper app
 make import-installed-essentials # import the real 5K Essentials images (preferred)
+make import-cleveland            # import Cleveland Museum of Art highlights
+make import-chicago              # import Art Institute of Chicago highlights
+make import-met                  # import Metropolitan Museum of Art highlights
+make import-nga                  # import National Gallery of Art highlights
+make import-harvard              # import Harvard Art Museums highlights; requires HARVARD_ART_MUSEUMS_API_KEY
+make import-smithsonian          # import Smithsonian American Art Museum highlights
+make import-vam                  # import Victoria and Albert Museum highlights
+make import-ycba                 # import Yale Center for British Art highlights
 make download-essentials         # fallback; Google previews cap around 1200px
 make run-app                     # run the menu-bar app
 ```

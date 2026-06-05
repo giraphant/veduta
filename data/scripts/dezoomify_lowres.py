@@ -18,7 +18,7 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
-# Add data-ops src to path
+# Add data src to path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from veduta_data.downloader import sha256_file, image_dimensions

@@ -12,7 +12,7 @@ import sys
 import time
 from pathlib import Path
 
-# Add data-ops src to path so we can import the existing modules
+# Add data src to path so we can import the existing modules
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from veduta_data.downloader import (
