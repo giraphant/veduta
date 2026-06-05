@@ -49,6 +49,9 @@ build:
 	@cp $(RELEASE_DIR)/$(APP_NAME) $(APP_BUNDLE)/Contents/MacOS/$(APP_NAME)
 	@cp Resources/Info.plist $(APP_BUNDLE)/Contents/Info.plist
 	@cp Assets/AppIcon.icns $(APP_BUNDLE)/Contents/Resources/AppIcon.icns
+	@cp Assets/menubar-icon.pdf $(APP_BUNDLE)/Contents/Resources/menubar-icon.pdf
+	@cp -R Resources/en.lproj $(APP_BUNDLE)/Contents/Resources/en.lproj
+	@cp -R Resources/zh-Hans.lproj $(APP_BUNDLE)/Contents/Resources/zh-Hans.lproj
 	@if security find-identity -v -p codesigning | grep -F "$(CODESIGN_IDENTITY)" >/dev/null 2>&1; then \
 		codesign --force --deep $(CODESIGN_OPTIONS) $(CODESIGN_ENTITLEMENTS) --sign "$(CODESIGN_IDENTITY)" $(APP_BUNDLE); \
 		echo "Built $(APP_BUNDLE) (signed with: $(CODESIGN_IDENTITY))"; \

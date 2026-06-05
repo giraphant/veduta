@@ -2,7 +2,7 @@
   <img src="Assets/icon.png" width="128" alt="Veduta logo">
 </p>
 
-<h1 align="center">Veduta</h1>
+<h1 align="center">Veduta · 淡景</h1>
 
 A local-first, open-source macOS wallpaper app for public-domain and museum artwork.
 

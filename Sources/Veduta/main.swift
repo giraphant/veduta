@@ -95,13 +95,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SettingsWindowControll
         if preferences.showMenuBarIcon {
             if statusItem == nil {
                 statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-                statusItem?.button?.title = "Art"
+                if let button = statusItem?.button {
+                    let image = menuBarIcon()
+                    image?.isTemplate = true
+                    button.image = image
+                }
             }
             rebuildMenu(message: statusMessage)
         } else if let statusItem {
             NSStatusBar.system.removeStatusItem(statusItem)
             self.statusItem = nil
         }
+    }
+
+    /// Phosphor "mountains" glyph bundled as a vector PDF; falls back to an SF Symbol.
+    private func menuBarIcon() -> NSImage? {
+        if let url = Bundle.main.url(forResource: "menubar-icon", withExtension: "pdf"),
+           let image = NSImage(contentsOf: url) {
+            image.size = NSSize(width: 18, height: 18)
+            return image
+        }
+        let config = NSImage.SymbolConfiguration(pointSize: 14, weight: .regular)
+        return NSImage(systemSymbolName: "mountain.2", accessibilityDescription: "Veduta")?
+            .withSymbolConfiguration(config)
     }
 
     private func applyDockActivationPolicy() {
