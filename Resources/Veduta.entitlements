@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Veduta is not sandboxed and uses no protected resources (mic/camera).
+         It reads its local library from ~/Pictures/VedutaLibrary and sets the
+         desktop wallpaper via NSWorkspace, neither of which needs an
+         entitlement. Hardened runtime with an empty grant set is correct. -->
+</dict>
+</plist>
