@@ -174,7 +174,8 @@ run-app:
 	VEDUTA_LIBRARY_DIR="$(LIBRARY_ROOT)" swift run Veduta
 
 # Publish the local library (catalog + manifests + images) to a MinIO/S3
-# bucket. Reads credentials from .env (gitignored); see .env.example.
+# bucket. Reads credentials from .env (gitignored); see the header of
+# Data/scripts/publish_mirror.py for the required variables.
 publish-mirror:
 	cd Data && python3 scripts/publish_mirror.py --library-root "$(LIBRARY_ROOT)" --env-file "../.env"
 
