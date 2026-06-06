@@ -8,9 +8,10 @@ Mirrors the canonical library tree verbatim:
     images/<collection-id>/*.jpg
 
 Uploads are incremental: an object is skipped when the bucket already holds a
-copy with a matching size and sha256 (stored as object metadata on first
-upload). Images are sent with a long immutable cache lifetime; the JSON
-manifests are sent with a short lifetime so refreshed catalogs propagate.
+copy of the same size (one LIST up front, then skip by size like `aws s3
+sync`). The content sha256 is still stored as object metadata on upload.
+Images are sent with a long immutable cache lifetime; the JSON manifests are
+sent with a short lifetime so refreshed catalogs propagate.
 
 Configuration comes from the environment (load a local .env first; it is
 gitignored). Required:
@@ -134,15 +135,30 @@ def make_client(args: argparse.Namespace):
     )
 
 
-def remote_matches(client, bucket: str, key: str, size: int, sha: str) -> bool:
-    """True when the bucket already holds this exact object (size + sha256)."""
-    try:
-        head = client.head_object(Bucket=bucket, Key=key)
-    except Exception:
-        return False
-    if head.get("ContentLength") != size:
-        return False
-    return head.get("Metadata", {}).get("sha256") == sha
+def _transfer_config():
+    from boto3.s3.transfer import TransferConfig
+
+    return TransferConfig(
+        multipart_threshold=16 * 1024 * 1024,
+        multipart_chunksize=16 * 1024 * 1024,
+        max_concurrency=4,
+    )
+
+
+def list_remote(client, bucket: str, prefix: str) -> dict[str, int]:
+    """Return {key: size} for everything already in the bucket under prefix.
+
+    One paginated LIST instead of a HEAD per file: far fewer requests (gentler
+    on a small Garage) and immune to the per-object metadata propagation lag
+    that made head-based skipping flaky under load. We skip on size match
+    alone, like `aws s3 sync` — multipart uploads are atomic, so a present
+    object with the right size is the fully-written one.
+    """
+    existing: dict[str, int] = {}
+    for page in client.get_paginator("list_objects_v2").paginate(Bucket=bucket, Prefix=prefix):
+        for obj in page.get("Contents", []):
+            existing[obj["Key"]] = obj["Size"]
+    return existing
 
 
 def main() -> int:
@@ -175,6 +191,14 @@ def main() -> int:
     if args.dry_run and not bucket:
         bucket = "<bucket>"  # dry-run does not require credentials
 
+    # Gentle multipart settings so a small/constrained Garage isn't flooded:
+    # fewer concurrent part uploads and larger parts (fewer total requests).
+    transfer_config = None if args.dry_run else _transfer_config()
+
+    existing = {} if args.dry_run else list_remote(client, bucket, prefix)
+    if not args.dry_run:
+        print(f"bucket already holds {len(existing)} object(s); syncing {len(files)} local file(s)\n", flush=True)
+
     uploaded = skipped = 0
     uploaded_bytes = 0
     failed: list[str] = []
@@ -182,13 +206,12 @@ def main() -> int:
         rel = path.relative_to(library_root).as_posix()
         key = prefix + rel
         size = path.stat().st_size
-        sha = sha256_file(path)
 
         is_manifest = path.suffix.lower() == ".json"
         cache_control = MANIFEST_CACHE_CONTROL if is_manifest else IMAGE_CACHE_CONTROL
         content_type = CONTENT_TYPES.get(path.suffix.lower(), "application/octet-stream")
 
-        if not args.dry_run and remote_matches(client, bucket, key, size, sha):
+        if not args.dry_run and existing.get(key) == size:
             skipped += 1
             continue
 
@@ -206,8 +229,9 @@ def main() -> int:
                 ExtraArgs={
                     "ContentType": content_type,
                     "CacheControl": cache_control,
-                    "Metadata": {"sha256": sha},
+                    "Metadata": {"sha256": sha256_file(path)},
                 },
+                Config=transfer_config,
             )
         except Exception as exc:
             # Don't abort the whole run for one bad object — record it and move
