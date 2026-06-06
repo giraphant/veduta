@@ -3,7 +3,7 @@ import json
 from pathlib import Path
 
 
-SCRIPT_PATH = Path(__file__).resolve().parent.parent / "scripts" / "mark_lowres_artworks.py"
+SCRIPT_PATH = Path(__file__).resolve().parent.parent / "scripts" / "archive" / "mark_lowres_artworks.py"
 SPEC = importlib.util.spec_from_file_location("mark_lowres_artworks", SCRIPT_PATH)
 mark_lowres_artworks = importlib.util.module_from_spec(SPEC)
 assert SPEC.loader is not None
