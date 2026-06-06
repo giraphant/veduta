@@ -63,11 +63,58 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SettingsWindowControll
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         loadPreferences()
+        installMainMenu()
         applyDockActivationPolicy()
         updateStatusItemVisibility()
         showSettingsWindow()
         rotateWallpaper()
         rescheduleTimer()
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        timer?.invalidate()
+    }
+
+    /// Even though Veduta runs as a menu-bar (accessory) app with no visible
+    /// menu bar, the standard window shortcuts — Cmd-W, Cmd-Q, Cmd-M, and the
+    /// Edit clipboard commands — only work when an `NSApp.mainMenu` exists, as
+    /// AppKit routes their key equivalents through it. Build a minimal one.
+    private func installMainMenu() {
+        let mainMenu = NSMenu()
+
+        let appMenuItem = NSMenuItem()
+        mainMenu.addItem(appMenuItem)
+        let appMenu = NSMenu()
+        appMenu.addItem(withTitle: "Hide Veduta", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
+        let hideOthers = appMenu.addItem(withTitle: "Hide Others", action: #selector(NSApplication.hideOtherApplications(_:)), keyEquivalent: "h")
+        hideOthers.keyEquivalentModifierMask = [.command, .option]
+        appMenu.addItem(withTitle: "Show All", action: #selector(NSApplication.unhideAllApplications(_:)), keyEquivalent: "")
+        appMenu.addItem(.separator())
+        appMenu.addItem(withTitle: "Quit Veduta", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        appMenuItem.submenu = appMenu
+
+        let editMenuItem = NSMenuItem()
+        mainMenu.addItem(editMenuItem)
+        let editMenu = NSMenu(title: "Edit")
+        editMenu.addItem(withTitle: "Undo", action: Selector(("undo:")), keyEquivalent: "z")
+        let redo = editMenu.addItem(withTitle: "Redo", action: Selector(("redo:")), keyEquivalent: "z")
+        redo.keyEquivalentModifierMask = [.command, .shift]
+        editMenu.addItem(.separator())
+        editMenu.addItem(withTitle: "Cut", action: #selector(NSText.cut(_:)), keyEquivalent: "x")
+        editMenu.addItem(withTitle: "Copy", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
+        editMenu.addItem(withTitle: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
+        editMenu.addItem(withTitle: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
+        editMenuItem.submenu = editMenu
+
+        let windowMenuItem = NSMenuItem()
+        mainMenu.addItem(windowMenuItem)
+        let windowMenu = NSMenu(title: "Window")
+        windowMenu.addItem(withTitle: "Close", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
+        windowMenu.addItem(withTitle: "Minimize", action: #selector(NSWindow.performMiniaturize(_:)), keyEquivalent: "m")
+        windowMenuItem.submenu = windowMenu
+        NSApp.windowsMenu = windowMenu
+
+        NSApp.mainMenu = mainMenu
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
@@ -146,11 +193,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SettingsWindowControll
     private func menuBarIcon() -> NSImage? {
         if let url = Bundle.main.url(forResource: "menubar-icon", withExtension: "pdf"),
            let image = NSImage(contentsOf: url) {
-            // Square artwork (192x192) with the mountains glyph centred and
-            // some built-in vertical padding. Keep it tall enough to read
-            // clearly in the bar; trim the width a little so it's slimmer
-            // than a full square without squashing the glyph.
-            image.size = NSSize(width: 15, height: 17)
+            // The PDF viewBox is cropped tight to the glyph, so NSStatusItem
+            // only adds one layer of menu-bar padding. Keep a standard 18pt
+            // height and derive width from the asset aspect ratio.
+            let targetHeight: CGFloat = 18
+            let aspect = image.size.height > 0 ? image.size.width / image.size.height : 1
+            image.size = NSSize(width: targetHeight * aspect, height: targetHeight)
             return image
         }
         let config = NSImage.SymbolConfiguration(pointSize: 14, weight: .semibold)
