@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Publish the local Veduta library to an S3-compatible bucket (MinIO).
+"""Publish the local Veduta library to an S3-compatible bucket (Garage).
 
 Mirrors the canonical library tree verbatim:
 
@@ -15,14 +15,14 @@ manifests are sent with a short lifetime so refreshed catalogs propagate.
 Configuration comes from the environment (load a local .env first; it is
 gitignored). Required:
 
-    MINIO_ENDPOINT      e.g. https://minio.example.com
-    MINIO_ACCESS_KEY
-    MINIO_SECRET_KEY
-    MINIO_BUCKET        e.g. veduta
+    GARAGE_ENDPOINT      e.g. https://minio.example.com
+    GARAGE_ACCESS_KEY
+    GARAGE_SECRET_KEY
+    GARAGE_BUCKET        e.g. veduta
 
 Optional:
 
-    MINIO_REGION        default "us-east-1" (MinIO ignores it but boto3 wants one)
+    GARAGE_REGION        default "us-east-1" (Garage ignores it but boto3 wants one)
     MIRROR_PREFIX       key prefix inside the bucket, e.g. "v1/" (default "")
     LIBRARY_ROOT        default ~/Pictures/VedutaLibrary
 
@@ -100,16 +100,16 @@ def make_client(args: argparse.Namespace):
     except ImportError:
         sys.exit("boto3 is required: pip install boto3 (or: uv pip install boto3)")
 
-    endpoint = os.environ.get("MINIO_ENDPOINT")
-    access_key = os.environ.get("MINIO_ACCESS_KEY")
-    secret_key = os.environ.get("MINIO_SECRET_KEY")
+    endpoint = os.environ.get("GARAGE_ENDPOINT")
+    access_key = os.environ.get("GARAGE_ACCESS_KEY")
+    secret_key = os.environ.get("GARAGE_SECRET_KEY")
     missing = [
         name
         for name, value in (
-            ("MINIO_ENDPOINT", endpoint),
-            ("MINIO_ACCESS_KEY", access_key),
-            ("MINIO_SECRET_KEY", secret_key),
-            ("MINIO_BUCKET", os.environ.get("MINIO_BUCKET")),
+            ("GARAGE_ENDPOINT", endpoint),
+            ("GARAGE_ACCESS_KEY", access_key),
+            ("GARAGE_SECRET_KEY", secret_key),
+            ("GARAGE_BUCKET", os.environ.get("GARAGE_BUCKET")),
         )
         if not value
     ]
@@ -121,7 +121,7 @@ def make_client(args: argparse.Namespace):
         endpoint_url=endpoint,
         aws_access_key_id=access_key,
         aws_secret_access_key=secret_key,
-        region_name=os.environ.get("MINIO_REGION", "us-east-1"),
+        region_name=os.environ.get("GARAGE_REGION", "us-east-1"),
         config=Config(signature_version="s3v4", s3={"addressing_style": "path"}),
     )
 
@@ -138,11 +138,12 @@ def remote_matches(client, bucket: str, key: str, size: int, sha: str) -> bool:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Publish the Veduta library to a MinIO/S3 bucket.")
+    parser = argparse.ArgumentParser(description="Publish the Veduta library to a Garage/S3 bucket.")
     parser.add_argument("--library-root", default=str(default_library_root()))
     parser.add_argument("--prefix", default=os.environ.get("MIRROR_PREFIX", ""))
     parser.add_argument("--dry-run", action="store_true", help="list what would change, upload nothing")
     parser.add_argument("--env-file", default=".env", help="path to a .env file to load (default: .env)")
+    parser.add_argument("--limit", type=int, help="only process the first N files (manifests first) — handy as a smoke test")
     args = parser.parse_args()
 
     load_dotenv(Path(args.env_file))
@@ -154,13 +155,15 @@ def main() -> int:
     files = collect_files(library_root)
     if not files:
         sys.exit(f"no publishable files found under {library_root}")
+    if args.limit is not None:
+        files = files[: args.limit]
 
     prefix = args.prefix.lstrip("/")
     if prefix and not prefix.endswith("/"):
         prefix += "/"
 
     client = None if args.dry_run else make_client(args)
-    bucket = os.environ.get("MINIO_BUCKET", "")
+    bucket = os.environ.get("GARAGE_BUCKET", "")
     if args.dry_run and not bucket:
         bucket = "<bucket>"  # dry-run does not require credentials
 
