@@ -173,11 +173,14 @@ download-all:
 run-app:
 	VEDUTA_LIBRARY_DIR="$(LIBRARY_ROOT)" swift run Veduta
 
-# Publish the local library (catalog + manifests + images) to a MinIO/S3
+# Publish the local library (catalog + manifests + images) to a Garage/S3
 # bucket. Reads credentials from .env (gitignored); see the header of
-# Data/scripts/publish_mirror.py for the required variables.
+# Data/scripts/publish_mirror.py for the required variables. Uses the project
+# venv python (which has boto3) when present, else the system python3.
+PUBLISH_PYTHON := $(if $(wildcard $(CURDIR)/.venv/bin/python),$(CURDIR)/.venv/bin/python,python3)
+
 publish-mirror:
-	cd Data && python3 scripts/publish_mirror.py --library-root "$(LIBRARY_ROOT)" --env-file "../.env"
+	cd Data && $(PUBLISH_PYTHON) scripts/publish_mirror.py --library-root "$(LIBRARY_ROOT)" --env-file "../.env"
 
 publish-mirror-dry-run:
-	cd Data && python3 scripts/publish_mirror.py --library-root "$(LIBRARY_ROOT)" --env-file "../.env" --dry-run
+	cd Data && $(PUBLISH_PYTHON) scripts/publish_mirror.py --library-root "$(LIBRARY_ROOT)" --env-file "../.env" --dry-run

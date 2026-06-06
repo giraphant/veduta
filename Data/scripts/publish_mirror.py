@@ -183,7 +183,7 @@ def main() -> int:
             skipped += 1
             continue
 
-        print(f"{'WOULD UPLOAD' if args.dry_run else 'upload'}  {key}  ({size / 1_048_576:.1f} MB)")
+        print(f"{'WOULD UPLOAD' if args.dry_run else 'upload'}  {key}  ({size / 1_048_576:.1f} MB)", flush=True)
         uploaded += 1
         uploaded_bytes += size
         if args.dry_run:
