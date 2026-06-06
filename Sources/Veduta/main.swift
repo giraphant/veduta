@@ -305,7 +305,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SettingsWindowControll
 
     @objc private func openMainWindow() { showSettingsWindow() }
 
-    @objc private func nextWallpaper() { rotateWallpaper() }
+    @objc private func nextWallpaper() { rotateWallpaper(preferDownloaded: true) }
 
     @objc private func setRotationInterval(_ sender: NSMenuItem) {
         guard let value = sender.representedObject as? NSNumber else { return }
@@ -355,7 +355,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SettingsWindowControll
         updateSettingsWindow()
     }
 
-    private func rotateWallpaper() {
+    /// `preferDownloaded` picks only from images already on disk so a manual
+    /// "Next" switches instantly with no network wait; it falls back to the
+    /// full streamable pool when nothing is downloaded yet. Auto rotation and
+    /// startup leave it `false` and stream-download on demand (the wait is
+    /// invisible without a user watching for a click response).
+    private func rotateWallpaper(preferDownloaded: Bool = false) {
         guard !isRotating else { return }
         isRotating = true
         rebuildMenu(message: "Fetching wallpaper…")
@@ -375,10 +380,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SettingsWindowControll
                     shown: state.summaries,
                     downloaded: state.downloadedIDs
                 )
-                let artworks = try self.library.availableArtworks(
-                    collectionIDs: enabled,
-                    enabledArtworkKinds: kinds
-                )
+                var artworks: [(Artwork, URL)] = []
+                if preferDownloaded {
+                    artworks = try self.library.loadDownloadedArtworks(
+                        collectionIDs: enabled,
+                        enabledArtworkKinds: kinds
+                    )
+                }
+                if artworks.isEmpty {
+                    artworks = try self.library.availableArtworks(
+                        collectionIDs: enabled,
+                        enabledArtworkKinds: kinds
+                    )
+                }
                 let picked = try self.picker.pick(count: screenCount, from: artworks)
                 let materialized = try self.materialize(picked, from: artworks)
                 outcome = .success(RotationResult(state: state, enabled: enabled, selections: materialized))
@@ -732,7 +746,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SettingsWindowControll
     }
 
     func settingsWindowControllerDidRequestNextWallpaper(_ controller: SettingsWindowController) {
-        rotateWallpaper()
+        rotateWallpaper(preferDownloaded: true)
     }
 
     func settingsWindowControllerDidRequestOpenLibraryFolder(_ controller: SettingsWindowController) {
