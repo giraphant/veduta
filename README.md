@@ -20,7 +20,7 @@ The menu-bar app ships as a signed + notarized DMG via [Homebrew](https://brew.s
 brew install --cask giraphant/tap/veduta
 ```
 
-Veduta reads wallpapers from a library you build locally under `~/Pictures/VedutaLibrary/` — see [How it works](#how-it-works) and the data-pipeline commands below.
+On first run Veduta streams artwork from the public mirror, so it works with no setup. You can also build a full library locally under `~/Pictures/VedutaLibrary/` — see [How it works](#how-it-works) and the data-pipeline commands below.
 
 ## How it works
 
@@ -34,6 +34,12 @@ The pipeline writes a library outside the repo, under `~/Pictures/VedutaLibrary/
 ```
 
 Downloaded artwork and generated library files are never committed.
+
+The app reads this library local-first. When the catalog, a manifest, or an
+image isn't present locally, it streams it from the mirror origin (default
+`https://garage.ramu.us/`) and caches it into the library, falling back to the
+upstream museum source if the mirror is unavailable. Set `VEDUTA_MIRROR_BASE_URL`
+to point at a different origin, or `VEDUTA_MIRROR=off` to stay purely local.
 
 ## Requirements
 
@@ -68,7 +74,7 @@ make run-app                     # run the menu-bar app
 1. **Data pipeline** — metadata and Essentials import work; other collections still need a high-res source.
 2. **Menu-bar app** — read the local library, pick a random artwork, set it as wallpaper, basic controls. *(done)*
 3. **Better local app** — intervals, collection filters, favorites, artwork details, launch at login.
-4. **Self-hosted mirror** — export CDN-ready manifests and images, serve from a static origin, keep upstream fallback and provenance.
+4. **Self-hosted mirror** — manifests and images published to a self-hosted S3 origin (Garage), app streams them local-first with upstream fallback and provenance. *(done)*
 5. **Public release** — app bundle, icon, signing, notarization, GitHub Releases. *(done)*
 
 ## License

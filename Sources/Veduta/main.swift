@@ -20,6 +20,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SettingsWindowControll
     }()
     private var timer: Timer?
 
+    private var isRotating = false
+
     private lazy var library: LocalLibrary = {
         let environmentPath = ProcessInfo.processInfo.environment["VEDUTA_LIBRARY_DIR"]
         let root: URL
@@ -30,8 +32,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SettingsWindowControll
                 .appendingPathComponent("Pictures")
                 .appendingPathComponent("VedutaLibrary")
         }
-        return LocalLibrary(root: root)
+        return LocalLibrary(root: root, mirror: Self.makeMirror())
     }()
+
+    /// The published mirror images and manifests stream from when they aren't
+    /// present locally. Defaults to the public origin; override the base URL
+    /// with `VEDUTA_MIRROR_BASE_URL`, or disable streaming with
+    /// `VEDUTA_MIRROR=off` (then the app is purely local, as before).
+    private static func makeMirror() -> MirrorClient? {
+        let environment = ProcessInfo.processInfo.environment
+        if environment["VEDUTA_MIRROR"] == "off" { return nil }
+        let base = environment["VEDUTA_MIRROR_BASE_URL"]
+            .flatMap(URL.init(string:))
+            ?? URL(string: "https://garage.ramu.us/")!
+        return MirrorClient(baseURL: base)
+    }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         loadPreferences()
@@ -270,31 +285,123 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SettingsWindowControll
     }
 
     private func rotateWallpaper() {
-        do {
-            try refreshDownloadedCollections()
-            let artworks = try library.loadDownloadedArtworks(
-                collectionIDs: enabledCollectionIDs,
-                enabledArtworkKinds: enabledArtworkKinds
-            )
-            let selected = try picker.pick(count: max(NSScreen.screens.count, 1), from: artworks)
-            try wallpaperService.setWallpapers(imageURLs: selected.map { $0.1 })
-            currentSelections = selected.map { (artwork: $0.0, imageURL: $0.1) }
-            rebuildMenu(message: "Ready")
-            updateSettingsWindow()
-        } catch {
-            rebuildMenu(message: "Veduta error: \(error.localizedDescription)")
-            updateSettingsWindow()
+        guard !isRotating else { return }
+        isRotating = true
+        rebuildMenu(message: "Fetching wallpaper…")
+        updateSettingsWindow()
+
+        let kinds = enabledArtworkKinds
+        let requestedCollections = enabledCollectionIDs
+        let screenCount = max(NSScreen.screens.count, 1)
+
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self else { return }
+            let outcome: Result<RotationResult, Error>
+            do {
+                let summaries = try self.library.availableCollections()
+                let availableIDs = Set(summaries.map { $0.id })
+                var enabled = requestedCollections.isEmpty
+                    ? availableIDs
+                    : requestedCollections.intersection(availableIDs)
+                if enabled.isEmpty, let first = summaries.first { enabled = [first.id] }
+
+                let artworks = try self.library.availableArtworks(
+                    collectionIDs: enabled,
+                    enabledArtworkKinds: kinds
+                )
+                let picked = try self.picker.pick(count: screenCount, from: artworks)
+                let materialized = try self.materialize(picked, from: artworks)
+                outcome = .success(RotationResult(summaries: summaries, enabled: enabled, selections: materialized))
+            } catch {
+                outcome = .failure(error)
+            }
+
+            DispatchQueue.main.async {
+                self.isRotating = false
+                self.applyRotationOutcome(outcome)
+            }
         }
     }
 
-    private func refreshDownloadedCollections() throws {
-        collectionSummaries = try library.loadDownloadedCollections()
-        let availableIDs = Set(collectionSummaries.map { $0.id })
+    private struct RotationResult {
+        let summaries: [CollectionSummary]
+        let enabled: Set<String>
+        let selections: [(artwork: Artwork, imageURL: URL)]
+    }
+
+    private func applyRotationOutcome(_ outcome: Result<RotationResult, Error>) {
+        switch outcome {
+        case let .success(result):
+            collectionSummaries = result.summaries
+            if result.enabled != enabledCollectionIDs {
+                enabledCollectionIDs = result.enabled
+                saveEnabledCollectionIDs()
+            }
+            do {
+                try wallpaperService.setWallpapers(imageURLs: result.selections.map { $0.imageURL })
+                currentSelections = result.selections
+                rebuildMenu(message: "Ready")
+            } catch {
+                rebuildMenu(message: "Veduta error: \(error.localizedDescription)")
+            }
+        case let .failure(error):
+            rebuildMenu(message: "Veduta error: \(error.localizedDescription)")
+        }
+        updateSettingsWindow()
+    }
+
+    /// Ensure each picked artwork has a local image, downloading from the
+    /// mirror when needed. If one fails to materialize, fill from a spare so a
+    /// transient fetch error doesn't abort the whole rotation. Runs on a
+    /// background queue. `setWallpapers` cycles across screens, so one
+    /// resolved image is enough.
+    private func materialize(
+        _ picked: [(Artwork, URL)],
+        from pool: [(Artwork, URL)]
+    ) throws -> [(artwork: Artwork, imageURL: URL)] {
+        var resolved: [(artwork: Artwork, imageURL: URL)] = []
+        var usedIDs = Set(picked.map { $0.0.id })
+        var spares = pool.filter { !usedIDs.contains($0.0.id) }.shuffled()
+
+        for item in picked {
+            if let url = try? library.ensureLocalImage(for: item.0) {
+                resolved.append((item.0, url))
+                continue
+            }
+            while let spare = spares.popLast() {
+                guard !usedIDs.contains(spare.0.id) else { continue }
+                if let url = try? library.ensureLocalImage(for: spare.0) {
+                    usedIDs.insert(spare.0.id)
+                    resolved.append((spare.0, url))
+                    break
+                }
+            }
+        }
+
+        guard !resolved.isEmpty else { throw LibraryError.imageUnavailable("rotation") }
+        return resolved
+    }
+
+    private func refreshCollectionsAsync() {
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self else { return }
+            let summaries = (try? self.library.availableCollections()) ?? []
+            DispatchQueue.main.async {
+                guard !summaries.isEmpty else { return }
+                self.collectionSummaries = summaries
+                self.reconcileEnabledCollections(available: Set(summaries.map { $0.id }))
+                self.rebuildMenu(message: self.statusMessage)
+                self.updateSettingsWindow()
+            }
+        }
+    }
+
+    private func reconcileEnabledCollections(available: Set<String>) {
         let previousIDs = enabledCollectionIDs
         if enabledCollectionIDs.isEmpty {
-            enabledCollectionIDs = availableIDs
+            enabledCollectionIDs = available
         } else {
-            enabledCollectionIDs.formIntersection(availableIDs)
+            enabledCollectionIDs.formIntersection(available)
             if enabledCollectionIDs.isEmpty, let firstCollection = collectionSummaries.first {
                 enabledCollectionIDs.insert(firstCollection.id)
             }
@@ -305,10 +412,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SettingsWindowControll
     }
 
     private func showSettingsWindow() {
-        try? refreshDownloadedCollections()
         updateSettingsWindow()
         settingsWindowController.showWindow(nil)
         NSApp.activate(ignoringOtherApps: true)
+        refreshCollectionsAsync()
     }
 
     private func updateSettingsWindow() {

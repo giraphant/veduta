@@ -2,9 +2,14 @@ import Foundation
 
 public struct Catalog: Decodable, Sendable, Equatable {
     public let collections: [CollectionSummary]
+    /// Optional override for the mirror origin that serves this library's
+    /// images and manifests. When absent, the app falls back to its built-in
+    /// default. Lets a self-hosted catalog point clients at its own origin.
+    public let mirrorBaseUrl: String?
 
-    public init(collections: [CollectionSummary]) {
+    public init(collections: [CollectionSummary], mirrorBaseUrl: String? = nil) {
         self.collections = collections
+        self.mirrorBaseUrl = mirrorBaseUrl
     }
 }
 
