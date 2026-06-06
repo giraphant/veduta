@@ -41,6 +41,8 @@ def test_write_metadata_library_creates_catalog_and_collection_manifest(tmp_path
     assert catalog["schemaVersion"] == 1
     assert catalog["collections"][0]["id"] == "essentials"
     assert catalog["collections"][0]["manifest"] == "collections/essentials.json"
+    # Curated cover from covers.json is re-applied when the catalog is written.
+    assert catalog["collections"][0]["cover"].startswith("images/essentials/")
 
     collection = json.loads((tmp_path / "collections" / "essentials.json").read_text(encoding="utf-8"))
     assert collection["schemaVersion"] == 1

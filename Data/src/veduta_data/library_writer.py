@@ -1,3 +1,4 @@
+import functools
 import json
 import re
 import tempfile
@@ -8,6 +9,19 @@ from veduta_data.artwork_kinds import classify_artwork_kind
 from veduta_data.models import SourceCollection, SourceLibrary
 
 IMAGE_SUFFIXES = ["s0", "s8192", "s6000", "s5120", "s4096"]
+
+# Curated per-collection cover images (the museum's signature work), kept in
+# the repo so regenerating the catalog re-applies them. Maps collection id ->
+# library-relative image path.
+COVERS_PATH = Path(__file__).resolve().parents[2] / "covers.json"
+
+
+@functools.lru_cache(maxsize=1)
+def collection_covers() -> dict[str, str]:
+    try:
+        return json.loads(COVERS_PATH.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
 
 
 def candidate_image_urls(image_base: str) -> list[str]:
@@ -90,7 +104,7 @@ def now_iso() -> str:
 
 
 def collection_summary(collection: SourceCollection) -> dict[str, object]:
-    return {
+    summary: dict[str, object] = {
         "id": collection.id,
         "title": collection.title,
         "shortName": collection.short_name,
@@ -99,6 +113,10 @@ def collection_summary(collection: SourceCollection) -> dict[str, object]:
         "expectedArtworkCount": collection.expected_artwork_count,
         "manifest": f"collections/{collection.id}.json",
     }
+    cover = collection_covers().get(collection.id)
+    if cover:
+        summary["cover"] = cover
+    return summary
 
 
 def collection_manifest(collection: SourceCollection, generated_at: str) -> dict[str, object]:
