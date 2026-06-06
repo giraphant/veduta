@@ -122,7 +122,15 @@ def make_client(args: argparse.Namespace):
         aws_access_key_id=access_key,
         aws_secret_access_key=secret_key,
         region_name=os.environ.get("GARAGE_REGION", "us-east-1"),
-        config=Config(signature_version="s3v4", s3={"addressing_style": "path"}),
+        config=Config(
+            signature_version="s3v4",
+            s3={"addressing_style": "path"},
+            # boto3 >=1.36 adds CRC32 checksums via aws-chunked trailers by
+            # default; Garage (and other S3-compatible stores) reject that with
+            # "Chunk format error". Only checksum when the operation requires it.
+            request_checksum_calculation="when_required",
+            response_checksum_validation="when_required",
+        ),
     )
 
 
@@ -169,6 +177,7 @@ def main() -> int:
 
     uploaded = skipped = 0
     uploaded_bytes = 0
+    failed: list[str] = []
     for path in files:
         rel = path.relative_to(library_root).as_posix()
         key = prefix + rel
@@ -184,27 +193,40 @@ def main() -> int:
             continue
 
         print(f"{'WOULD UPLOAD' if args.dry_run else 'upload'}  {key}  ({size / 1_048_576:.1f} MB)", flush=True)
-        uploaded += 1
-        uploaded_bytes += size
         if args.dry_run:
+            uploaded += 1
+            uploaded_bytes += size
             continue
 
-        client.upload_file(
-            str(path),
-            bucket,
-            key,
-            ExtraArgs={
-                "ContentType": content_type,
-                "CacheControl": cache_control,
-                "Metadata": {"sha256": sha},
-            },
-        )
+        try:
+            client.upload_file(
+                str(path),
+                bucket,
+                key,
+                ExtraArgs={
+                    "ContentType": content_type,
+                    "CacheControl": cache_control,
+                    "Metadata": {"sha256": sha},
+                },
+            )
+        except Exception as exc:
+            # Don't abort the whole run for one bad object — record it and move
+            # on. Already-uploaded files are skipped on the next run, so a
+            # re-run resumes and retries only what's left.
+            print(f"  FAILED  {key}: {exc}", flush=True)
+            failed.append(key)
+            continue
+        uploaded += 1
+        uploaded_bytes += size
 
     verb = "would upload" if args.dry_run else "uploaded"
     print(
         f"\nDone: {verb} {uploaded} file(s) ({uploaded_bytes / 1_073_741_824:.2f} GB), "
-        f"skipped {skipped} unchanged, {len(files)} total."
+        f"skipped {skipped} unchanged, {len(failed)} failed, {len(files)} total."
     )
+    if failed:
+        print(f"Failed objects ({len(failed)}): re-run to retry just these.", flush=True)
+        return 1
     return 0
 
 
