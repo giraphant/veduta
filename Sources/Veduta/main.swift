@@ -2,10 +2,23 @@ import AppKit
 import Foundation
 import VedutaCore
 
+/// Thread-safe cancel flag for a running "Download all" task.
+final class CancellationToken {
+    private let lock = NSLock()
+    private var cancelled = false
+    var isCancelled: Bool { lock.lock(); defer { lock.unlock() }; return cancelled }
+    func cancel() { lock.lock(); cancelled = true; lock.unlock() }
+}
+
 final class AppDelegate: NSObject, NSApplicationDelegate, SettingsWindowControllerDelegate {
     private var statusItem: NSStatusItem?
     private var currentSelections: [(artwork: Artwork, imageURL: URL)] = []
     private var collectionSummaries: [CollectionSummary] = []
+    private var downloadedCollectionIDs = Set<String>()
+    private var availabilityByID: [String: LocalLibrary.CollectionAvailability] = [:]
+    private var activeDownloads: [String: (completed: Int, total: Int)] = [:]
+    private var downloadTokens: [String: CancellationToken] = [:]
+    private var isPrefetchingCovers = false
     private var statusMessage = "Ready"
     private var enabledCollectionIDs = Set<String>()
     private var enabledArtworkKinds = Set(ArtworkKind.allCases)
@@ -127,10 +140,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SettingsWindowControll
     private func menuBarIcon() -> NSImage? {
         if let url = Bundle.main.url(forResource: "menubar-icon", withExtension: "pdf"),
            let image = NSImage(contentsOf: url) {
-            image.size = NSSize(width: 18, height: 18)
+            // Slightly narrower-than-tall artwork (187x192) so the glyph reads
+            // a touch slimmer and claims a bit less horizontal space.
+            image.size = NSSize(width: 17.5, height: 18)
             return image
         }
-        let config = NSImage.SymbolConfiguration(pointSize: 14, weight: .regular)
+        let config = NSImage.SymbolConfiguration(pointSize: 14, weight: .semibold)
         return NSImage(systemSymbolName: "mountain.2", accessibilityDescription: "Veduta")?
             .withSymbolConfiguration(config)
     }
@@ -298,20 +313,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SettingsWindowControll
             guard let self else { return }
             let outcome: Result<RotationResult, Error>
             do {
-                let summaries = try self.library.availableCollections()
-                let availableIDs = Set(summaries.map { $0.id })
-                var enabled = requestedCollections.isEmpty
-                    ? availableIDs
-                    : requestedCollections.intersection(availableIDs)
-                if enabled.isEmpty, let first = summaries.first { enabled = [first.id] }
-
+                let state = try self.loadCollectionsState()
+                let enabled = self.resolveEnabledCollections(
+                    requested: requestedCollections,
+                    shown: state.summaries,
+                    downloaded: state.downloadedIDs
+                )
                 let artworks = try self.library.availableArtworks(
                     collectionIDs: enabled,
                     enabledArtworkKinds: kinds
                 )
                 let picked = try self.picker.pick(count: screenCount, from: artworks)
                 let materialized = try self.materialize(picked, from: artworks)
-                outcome = .success(RotationResult(summaries: summaries, enabled: enabled, selections: materialized))
+                outcome = .success(RotationResult(state: state, enabled: enabled, selections: materialized))
             } catch {
                 outcome = .failure(error)
             }
@@ -323,16 +337,55 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SettingsWindowControll
         }
     }
 
+    private struct CollectionsState {
+        let availability: [LocalLibrary.CollectionAvailability]
+        var summaries: [CollectionSummary] { availability.map { $0.summary } }
+        var downloadedIDs: Set<String> { Set(availability.filter { $0.hasLocal }.map { $0.summary.id }) }
+    }
+
     private struct RotationResult {
-        let summaries: [CollectionSummary]
+        let state: CollectionsState
         let enabled: Set<String>
         let selections: [(artwork: Artwork, imageURL: URL)]
+    }
+
+    /// Count, per collection, what's local vs still only on the mirror.
+    private func loadCollectionsState() throws -> CollectionsState {
+        CollectionsState(availability: try library.collectionAvailability())
+    }
+
+    private func applyCollectionsState(_ state: CollectionsState) {
+        collectionSummaries = state.summaries
+        downloadedCollectionIDs = state.downloadedIDs
+        availabilityByID = Dictionary(uniqueKeysWithValues: state.availability.map { ($0.summary.id, $0) })
+    }
+
+    /// Keep the user's saved choices that still exist; on a fresh profile,
+    /// enable what's already downloaded, falling back to Essentials only (not
+    /// every streamable collection — those are opt-in).
+    private func resolveEnabledCollections(
+        requested: Set<String>,
+        shown: [CollectionSummary],
+        downloaded: Set<String>
+    ) -> Set<String> {
+        let shownIDs = Set(shown.map { $0.id })
+        var enabled = requested.intersection(shownIDs)
+        if enabled.isEmpty {
+            if !downloaded.isEmpty {
+                enabled = downloaded
+            } else if shownIDs.contains("essentials") {
+                enabled = ["essentials"]
+            } else if let first = shown.first {
+                enabled = [first.id]
+            }
+        }
+        return enabled
     }
 
     private func applyRotationOutcome(_ outcome: Result<RotationResult, Error>) {
         switch outcome {
         case let .success(result):
-            collectionSummaries = result.summaries
+            applyCollectionsState(result.state)
             if result.enabled != enabledCollectionIDs {
                 enabledCollectionIDs = result.enabled
                 saveEnabledCollectionIDs()
@@ -382,32 +435,100 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SettingsWindowControll
         return resolved
     }
 
-    private func refreshCollectionsAsync() {
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+    // MARK: - Per-collection bulk download ("Download all")
+
+    private func startCollectionDownload(_ collectionID: String) {
+        guard activeDownloads[collectionID] == nil else { return }
+        let token = CancellationToken()
+        downloadTokens[collectionID] = token
+
+        DispatchQueue.global(qos: .utility).async { [weak self] in
             guard let self else { return }
-            let summaries = (try? self.library.availableCollections()) ?? []
+            let pending = (try? self.library.pendingDownloads(inCollection: collectionID)) ?? []
+            guard !pending.isEmpty else {
+                DispatchQueue.main.async {
+                    self.downloadTokens[collectionID] = nil
+                    self.refreshCollectionsAsync()
+                }
+                return
+            }
             DispatchQueue.main.async {
-                guard !summaries.isEmpty else { return }
-                self.collectionSummaries = summaries
-                self.reconcileEnabledCollections(available: Set(summaries.map { $0.id }))
-                self.rebuildMenu(message: self.statusMessage)
+                self.activeDownloads[collectionID] = (0, pending.count)
+                self.updateSettingsWindow()
+            }
+
+            var completed = 0
+            for artwork in pending {
+                if token.isCancelled { break }
+                _ = try? self.library.ensureLocalImage(for: artwork)
+                completed += 1
+                if completed % 3 == 0 || completed == pending.count {
+                    let done = completed
+                    DispatchQueue.main.async {
+                        if self.activeDownloads[collectionID] != nil {
+                            self.activeDownloads[collectionID] = (done, pending.count)
+                            self.updateSettingsWindow()
+                        }
+                    }
+                }
+            }
+
+            DispatchQueue.main.async {
+                self.activeDownloads[collectionID] = nil
+                self.downloadTokens[collectionID] = nil
+                self.refreshCollectionsAsync()
                 self.updateSettingsWindow()
             }
         }
     }
 
-    private func reconcileEnabledCollections(available: Set<String>) {
-        let previousIDs = enabledCollectionIDs
-        if enabledCollectionIDs.isEmpty {
-            enabledCollectionIDs = available
-        } else {
-            enabledCollectionIDs.formIntersection(available)
-            if enabledCollectionIDs.isEmpty, let firstCollection = collectionSummaries.first {
-                enabledCollectionIDs.insert(firstCollection.id)
+    private func cancelCollectionDownload(_ collectionID: String) {
+        downloadTokens[collectionID]?.cancel()
+    }
+
+    private func refreshCollectionsAsync() {
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self else { return }
+            let state = try? self.loadCollectionsState()
+            DispatchQueue.main.async {
+                guard let state, !state.summaries.isEmpty else { return }
+                self.applyCollectionsState(state)
+                let previousIDs = self.enabledCollectionIDs
+                self.enabledCollectionIDs = self.resolveEnabledCollections(
+                    requested: self.enabledCollectionIDs,
+                    shown: state.summaries,
+                    downloaded: state.downloadedIDs
+                )
+                if self.enabledCollectionIDs != previousIDs {
+                    self.saveEnabledCollectionIDs()
+                }
+                self.rebuildMenu(message: self.statusMessage)
+                self.updateSettingsWindow()
+                self.prefetchCovers()
             }
         }
-        if enabledCollectionIDs != previousIDs {
-            saveEnabledCollectionIDs()
+    }
+
+    /// Download each collection's cover image into the library (low priority),
+    /// then refresh the window so cards swap their placeholder for the real
+    /// art as each lands. Covers go to their normal `images/...` path, so this
+    /// also seeds every collection with one local image.
+    private func prefetchCovers() {
+        guard !isPrefetchingCovers else { return }
+        let root = library.root
+        let pending = collectionSummaries.compactMap { summary -> String? in
+            guard let cover = summary.cover else { return nil }
+            return FileManager.default.fileExists(atPath: root.appendingPathComponent(cover).path) ? nil : cover
+        }
+        guard !pending.isEmpty else { return }
+        isPrefetchingCovers = true
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            guard let self else { return }
+            for cover in pending {
+                _ = try? self.library.ensureLocalCover(relativePath: cover)
+                DispatchQueue.main.async { self.updateSettingsWindow() }
+            }
+            DispatchQueue.main.async { self.isPrefetchingCovers = false }
         }
     }
 
@@ -430,11 +551,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SettingsWindowControll
             rotationOptions: rotationIntervalOptions.map { SettingsRotationOption(title: $0.title, seconds: $0.seconds) },
             collections: collectionSummaries.map { summary in
                 let isEnabled = enabledCollectionIDs.contains(summary.id)
+                let downloadState: SettingsCollectionDownloadState
+                if let progress = activeDownloads[summary.id] {
+                    downloadState = .downloading(completed: progress.completed, total: progress.total)
+                } else if let remaining = availabilityByID[summary.id]?.streamableCount, remaining > 0 {
+                    downloadState = .downloadable(remaining: remaining)
+                } else {
+                    downloadState = .fullyDownloaded
+                }
                 return SettingsCollectionOption(
                     id: summary.id,
                     title: summary.shortName,
+                    subtitle: summary.title,
+                    artworkCount: summary.artworkCount,
+                    coverURL: availabilityByID[summary.id]?.coverPath.flatMap { library.localImageURL(forRelativePath: $0) },
                     isEnabled: isEnabled,
-                    isToggleEnabled: collectionSummaries.count > 1 && (!isEnabled || enabledCollectionIDs.count > 1)
+                    isToggleEnabled: collectionSummaries.count > 1 && (!isEnabled || enabledCollectionIDs.count > 1),
+                    downloadState: downloadState
                 )
             },
             artworkKinds: ArtworkKind.allCases.map { kind in
@@ -450,7 +583,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SettingsWindowControll
             currentArtworkCreator: currentSelections.first?.artwork.creator,
             statusMessage: statusMessage,
             libraryPath: library.root.path,
-            downloadedCollectionCount: collectionSummaries.count
+            downloadedCollectionCount: downloadedCollectionIDs.count,
+            mirrorCollectionCount: collectionSummaries.filter { (availabilityByID[$0.id]?.streamableCount ?? 0) > 0 }.count
         )
     }
 
@@ -529,6 +663,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SettingsWindowControll
         }
         saveEnabledArtworkKinds()
         rebuildMenu(message: "Ready")
+        updateSettingsWindow()
+    }
+
+    func settingsWindowController(_ controller: SettingsWindowController, didRequestDownloadCollection collectionID: String) {
+        startCollectionDownload(collectionID)
+    }
+
+    func settingsWindowController(_ controller: SettingsWindowController, didRequestCancelDownloadCollection collectionID: String) {
+        cancelCollectionDownload(collectionID)
         updateSettingsWindow()
     }
 

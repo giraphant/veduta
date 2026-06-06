@@ -127,6 +127,70 @@ final class MirrorClientTests: XCTestCase {
         XCTAssertTrue(try library.availableArtworks().isEmpty)
     }
 
+    func testCollectionAvailabilitySeparatesDownloadedFromStreamable() throws {
+        let root = try makeRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        // catalog with two collections
+        let catalog = """
+        {
+          "collections": [
+            { "id": "essentials", "title": "Essentials", "shortName": "Essentials", "sourcePackId": 0, "artworkCount": 1, "expectedArtworkCount": 1, "manifest": "collections/essentials.json" },
+            { "id": "berlin", "title": "Berlin", "shortName": "Berlin", "sourcePackId": 1, "artworkCount": 1, "expectedArtworkCount": 1, "manifest": "collections/berlin.json" }
+          ]
+        }
+        """
+        try Data(catalog.utf8).write(to: root.appendingPathComponent("catalog.json"))
+        try Data(manifestJSON(id: "essentials", artworkID: "ess-1", localPath: "images/essentials/ess-1.jpg").utf8)
+            .write(to: root.appendingPathComponent("collections/essentials.json"))
+        try Data(manifestJSON(id: "berlin", artworkID: "ber-1", localPath: "images/berlin/ber-1.jpg").utf8)
+            .write(to: root.appendingPathComponent("collections/berlin.json"))
+
+        // only the essentials image exists on disk
+        let essImage = root.appendingPathComponent("images/essentials/ess-1.jpg")
+        try FileManager.default.createDirectory(at: essImage.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data("img".utf8).write(to: essImage)
+
+        let library = LocalLibrary(root: root, mirror: MirrorClient(baseURL: base, transport: FakeTransport()))
+        let availability = try library.collectionAvailability()
+
+        let essentials = try XCTUnwrap(availability.first { $0.summary.id == "essentials" })
+        let berlin = try XCTUnwrap(availability.first { $0.summary.id == "berlin" })
+        XCTAssertTrue(essentials.hasLocal)
+        XCTAssertFalse(essentials.hasStreamable)  // its only image is already local
+        XCTAssertFalse(berlin.hasLocal)
+        XCTAssertTrue(berlin.hasStreamable)       // only reachable via mirror
+    }
+
+    func testPendingDownloadsListsOnlyMissingStreamableArtworks() throws {
+        let root = try makeRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let catalog = """
+        { "collections": [ { "id": "c", "title": "C", "shortName": "C", "sourcePackId": 0, "artworkCount": 2, "expectedArtworkCount": 2, "manifest": "collections/c.json" } ] }
+        """
+        try Data(catalog.utf8).write(to: root.appendingPathComponent("catalog.json"))
+        let manifest = """
+        {
+          "schemaVersion": 1, "id": "c", "title": "C", "shortName": "C", "generatedAt": "2026-06-06T00:00:00Z",
+          "source": { "type": "mirror", "packId": 0, "reportedSizesMb": {} },
+          "artworks": [
+            { "id": "a-1", "title": "A1", "creator": "x", "attribution": "y", "sources": { "canonicalPage": "https://e.com/1" }, "rights": { "work": "public-domain", "reproduction": "f" }, "images": { "wallpaper": { "localPath": "images/c/a-1.jpg", "fallbackUrls": [], "bytes": 1000 } } },
+            { "id": "a-2", "title": "A2", "creator": "x", "attribution": "y", "sources": { "canonicalPage": "https://e.com/2" }, "rights": { "work": "public-domain", "reproduction": "f" }, "images": { "wallpaper": { "localPath": "images/c/a-2.jpg", "fallbackUrls": [], "bytes": 1000 } } }
+          ]
+        }
+        """
+        try Data(manifest.utf8).write(to: root.appendingPathComponent("collections/c.json"))
+
+        let local = root.appendingPathComponent("images/c/a-1.jpg")
+        try FileManager.default.createDirectory(at: local.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data("img".utf8).write(to: local)
+
+        let library = LocalLibrary(root: root, mirror: MirrorClient(baseURL: base, transport: FakeTransport()))
+        let pending = try library.pendingDownloads(inCollection: "c")
+        XCTAssertEqual(pending.map { $0.id }, ["a-2"], "only the not-yet-local artwork is pending")
+    }
+
     func testLoadCatalogFetchesFromMirrorWhenMissingLocally() throws {
         let root = try makeRoot(createCollectionsDir: false)
         defer { try? FileManager.default.removeItem(at: root) }
@@ -175,6 +239,37 @@ final class MirrorClientTests: XCTestCase {
       ]
     }
     """
+
+    private func manifestJSON(id: String, artworkID: String, localPath: String) -> String {
+        """
+        {
+          "schemaVersion": 1,
+          "id": "\(id)",
+          "title": "\(id)",
+          "shortName": "\(id)",
+          "generatedAt": "2026-06-06T00:00:00Z",
+          "source": { "type": "mirror", "packId": 0, "reportedSizesMb": {} },
+          "artworks": [
+            {
+              "id": "\(artworkID)",
+              "title": "Artwork",
+              "creator": "Anon",
+              "attribution": "public domain",
+              "sources": { "canonicalPage": "https://example.com/a" },
+              "rights": { "work": "public-domain", "reproduction": "faithful" },
+              "images": {
+                "wallpaper": {
+                  "localPath": "\(localPath)",
+                  "fallbackUrls": [],
+                  "sha256": "x",
+                  "bytes": 1000
+                }
+              }
+            }
+          ]
+        }
+        """
+    }
 
     private func writeLibrary(at root: URL, localPath: String, sha256: String, bytes: Int) throws {
         try Data(catalogJSON.utf8).write(to: root.appendingPathComponent("catalog.json"))

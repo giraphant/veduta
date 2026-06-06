@@ -43,6 +43,107 @@ public final class LocalLibrary {
 
     // MARK: - Mirror-backed availability
 
+    /// A collection's two independent dimensions: how many artworks are on
+    /// disk (`localCount`) vs still only streamable from the mirror
+    /// (`streamableCount`, i.e. pending downloads). A fully-downloaded
+    /// collection has `streamableCount == 0`.
+    public struct CollectionAvailability: Equatable {
+        public let summary: CollectionSummary
+        public let localCount: Int
+        public let streamableCount: Int
+        /// Relative path of the collection's cover image. Shown only once it's
+        /// been prefetched to a local file (resolve with `localImageURL`), so
+        /// the card never depends on a flaky network image load.
+        public let coverPath: String?
+
+        public var hasLocal: Bool { localCount > 0 }
+        public var hasStreamable: Bool { streamableCount > 0 }
+    }
+
+    /// Upper bound on an artwork's bytes for it to be a cover candidate, so a
+    /// thumbnail never pulls a multi-hundred-MB gigapixel original.
+    private static let coverMaxBytes = 20 * 1024 * 1024
+
+    /// One pass over the catalog counting, per collection, how much is local
+    /// vs still only on the mirror — so the UI can show an "Enable" toggle and
+    /// a "Download all (N)" action independently.
+    public func collectionAvailability() throws -> [CollectionAvailability] {
+        let catalog = try loadCatalog()
+        var result: [CollectionAvailability] = []
+        for summary in catalog.collections {
+            let collection = try loadCollection(summary)
+            var localCount = 0
+            var streamableCount = 0
+            var cover: Artwork?
+            var coverScore = (Int.max, Int.max)  // (landscapeRank, bytes); lower wins
+            for artwork in collection.artworks where artwork.images.wallpaper.excluded != true {
+                let wallpaper = artwork.images.wallpaper
+                if FileManager.default.fileExists(atPath: wallpaperURL(for: artwork).path) {
+                    localCount += 1
+                } else if mirrorEligible(artwork) {
+                    streamableCount += 1
+                }
+                // Prefer the smallest landscape image within the cover size cap.
+                if wallpaper.removedLocalImage != true, wallpaper.lowRes != true,
+                   let bytes = wallpaper.bytes, bytes <= Self.coverMaxBytes {
+                    let landscapeRank = (wallpaper.width ?? 0) > (wallpaper.height ?? 0) ? 0 : 1
+                    let score = (landscapeRank, bytes)
+                    if score < coverScore {
+                        coverScore = score
+                        cover = artwork
+                    }
+                }
+            }
+            if localCount > 0 || streamableCount > 0 {
+                // Curated signature cover from the catalog wins; otherwise the
+                // heuristic pick (smallest landscape) is the fallback.
+                let coverPath = summary.cover ?? cover.map { $0.images.wallpaper.localPath }
+                result.append(CollectionAvailability(
+                    summary: summary,
+                    localCount: localCount,
+                    streamableCount: streamableCount,
+                    coverPath: coverPath
+                ))
+            }
+        }
+        return result
+    }
+
+    /// File URL for a library-relative image path when it's on disk, else nil.
+    public func localImageURL(forRelativePath path: String) -> URL? {
+        let local = root.appendingPathComponent(path)
+        return FileManager.default.fileExists(atPath: local.path) ? local : nil
+    }
+
+    /// Download a collection's cover image into the library (at its normal
+    /// `images/...` path) if it isn't already there. Returns the local URL.
+    @discardableResult
+    public func ensureLocalCover(relativePath: String) throws -> URL {
+        let destination = root.appendingPathComponent(relativePath)
+        if FileManager.default.fileExists(atPath: destination.path) { return destination }
+        guard let mirror else { throw LibraryError.imageUnavailable(relativePath) }
+        let data = try mirror.fetch(relativePath: relativePath)
+        try FileManager.default.createDirectory(
+            at: destination.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try data.write(to: destination, options: .atomic)
+        return destination
+    }
+
+    /// Artworks in a collection that can be pulled from the mirror but aren't
+    /// on disk yet — the work list for a "Download all" action.
+    public func pendingDownloads(inCollection collectionID: String) throws -> [Artwork] {
+        let catalog = try loadCatalog()
+        guard let summary = catalog.collections.first(where: { $0.id == collectionID }) else { return [] }
+        let collection = try loadCollection(summary)
+        return collection.artworks.filter { artwork in
+            artwork.images.wallpaper.excluded != true
+                && mirrorEligible(artwork)
+                && !FileManager.default.fileExists(atPath: wallpaperURL(for: artwork).path)
+        }
+    }
+
     /// Collections with at least one *available* artwork — local on disk, or
     /// streamable from the mirror. With no mirror configured this is identical
     /// to `loadDownloadedCollections`.

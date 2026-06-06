@@ -21,6 +21,9 @@ public struct CollectionSummary: Decodable, Sendable, Equatable {
     public let artworkCount: Int
     public let expectedArtworkCount: Int
     public let manifest: String
+    /// Relative path of the curated cover artwork's image (the collection's
+    /// signature piece). Optional; the app falls back to a heuristic pick.
+    public let cover: String?
 
     public init(
         id: String,
@@ -29,7 +32,8 @@ public struct CollectionSummary: Decodable, Sendable, Equatable {
         sourcePackId: Int,
         artworkCount: Int,
         expectedArtworkCount: Int,
-        manifest: String
+        manifest: String,
+        cover: String? = nil
     ) {
         self.id = id
         self.title = title
@@ -38,6 +42,7 @@ public struct CollectionSummary: Decodable, Sendable, Equatable {
         self.artworkCount = artworkCount
         self.expectedArtworkCount = expectedArtworkCount
         self.manifest = manifest
+        self.cover = cover
     }
 }
 

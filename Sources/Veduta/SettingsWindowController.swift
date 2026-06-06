@@ -15,11 +15,26 @@ struct SettingsRotationOption: Identifiable, Equatable {
     }
 }
 
+enum SettingsCollectionDownloadState: Equatable {
+    /// Every image is on disk (pipeline-built or fully downloaded).
+    case fullyDownloaded
+    /// `remaining` images are streamable from the mirror but not local yet.
+    case downloadable(remaining: Int)
+    /// A "Download all" task is running.
+    case downloading(completed: Int, total: Int)
+}
+
 struct SettingsCollectionOption: Identifiable, Equatable {
     let id: String
     let title: String
+    /// Longer descriptive line (currently the catalog's full title; a curated
+    /// blurb can replace it once the pipeline ships one).
+    let subtitle: String
+    let artworkCount: Int
+    let coverURL: URL?
     let isEnabled: Bool
     let isToggleEnabled: Bool
+    let downloadState: SettingsCollectionDownloadState
 }
 
 struct SettingsArtworkKindOption: Identifiable, Equatable {
@@ -41,6 +56,7 @@ struct SettingsSnapshot: Equatable {
     let statusMessage: String
     let libraryPath: String
     let downloadedCollectionCount: Int
+    let mirrorCollectionCount: Int
 
     static let empty = SettingsSnapshot(
         showMenuBarIcon: true,
@@ -53,7 +69,8 @@ struct SettingsSnapshot: Equatable {
         currentArtworkCreator: nil,
         statusMessage: "Ready",
         libraryPath: "",
-        downloadedCollectionCount: 0
+        downloadedCollectionCount: 0,
+        mirrorCollectionCount: 0
     )
 }
 
@@ -62,6 +79,8 @@ protocol SettingsWindowControllerDelegate: AnyObject {
     func settingsWindowController(_ controller: SettingsWindowController, didChangeDockIconVisibility isVisible: Bool)
     func settingsWindowController(_ controller: SettingsWindowController, didChangeRotationInterval seconds: TimeInterval?)
     func settingsWindowController(_ controller: SettingsWindowController, didSetCollection collectionID: String, isEnabled: Bool)
+    func settingsWindowController(_ controller: SettingsWindowController, didRequestDownloadCollection collectionID: String)
+    func settingsWindowController(_ controller: SettingsWindowController, didRequestCancelDownloadCollection collectionID: String)
     func settingsWindowController(_ controller: SettingsWindowController, didSetArtworkKind kind: ArtworkKind, isEnabled: Bool)
     func settingsWindowControllerDidRequestNextWallpaper(_ controller: SettingsWindowController)
     func settingsWindowControllerDidRequestOpenLibraryFolder(_ controller: SettingsWindowController)
@@ -164,6 +183,14 @@ final class SettingsWindowController: NSWindowController {
                 guard let self else { return }
                 self.delegate?.settingsWindowController(self, didSetCollection: collectionID, isEnabled: isEnabled)
             },
+            onDownloadCollection: { [weak self] collectionID in
+                guard let self else { return }
+                self.delegate?.settingsWindowController(self, didRequestDownloadCollection: collectionID)
+            },
+            onCancelDownloadCollection: { [weak self] collectionID in
+                guard let self else { return }
+                self.delegate?.settingsWindowController(self, didRequestCancelDownloadCollection: collectionID)
+            },
             onArtworkKindChanged: { [weak self] kind, isEnabled in
                 guard let self else { return }
                 self.delegate?.settingsWindowController(self, didSetArtworkKind: kind, isEnabled: isEnabled)
@@ -191,6 +218,8 @@ private struct SettingsView: View {
     let onDockChanged: (Bool) -> Void
     let onRotationChanged: (TimeInterval?) -> Void
     let onCollectionChanged: (String, Bool) -> Void
+    let onDownloadCollection: (String) -> Void
+    let onCancelDownloadCollection: (String) -> Void
     let onArtworkKindChanged: (ArtworkKind, Bool) -> Void
     let onNextWallpaper: () -> Void
     let onOpenLibraryFolder: () -> Void
@@ -206,6 +235,8 @@ private struct SettingsView: View {
         onDockChanged: @escaping (Bool) -> Void,
         onRotationChanged: @escaping (TimeInterval?) -> Void,
         onCollectionChanged: @escaping (String, Bool) -> Void,
+        onDownloadCollection: @escaping (String) -> Void,
+        onCancelDownloadCollection: @escaping (String) -> Void,
         onArtworkKindChanged: @escaping (ArtworkKind, Bool) -> Void,
         onNextWallpaper: @escaping () -> Void,
         onOpenLibraryFolder: @escaping () -> Void,
@@ -217,6 +248,8 @@ private struct SettingsView: View {
         self.onDockChanged = onDockChanged
         self.onRotationChanged = onRotationChanged
         self.onCollectionChanged = onCollectionChanged
+        self.onDownloadCollection = onDownloadCollection
+        self.onCancelDownloadCollection = onCancelDownloadCollection
         self.onArtworkKindChanged = onArtworkKindChanged
         self.onNextWallpaper = onNextWallpaper
         self.onOpenLibraryFolder = onOpenLibraryFolder
@@ -330,29 +363,158 @@ private struct SettingsView: View {
     }
 
     private var collectionsPane: some View {
-        Form {
-            Section("Downloaded Collections") {
+        ScrollView {
+            LazyVStack(spacing: 12) {
                 if snapshot.collections.isEmpty {
-                    Text("No downloaded collections found yet.")
+                    Text("No collections found yet.")
                         .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.top, 8)
                 } else {
-                    ForEach(snapshot.collections) { collection in
-                        Toggle(collection.title, isOn: Binding(
-                            get: { collection.isEnabled },
-                            set: { value in onCollectionChanged(collection.id, value) }
-                        ))
-                        .disabled(!collection.isToggleEnabled)
-
-                        if !collection.isToggleEnabled {
-                            Text("At least one collection must stay enabled.")
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
+                    ForEach(snapshot.collections, content: collectionCard)
                 }
             }
+            .padding(20)
         }
-        .formStyle(.grouped)
+    }
+
+    /// A wide banner card per collection: cover art on the left, title +
+    /// description + a count line in the middle, and the two actions stacked on
+    /// the right — activation as a pill (the primary choice) over a quiet
+    /// download control.
+    private func collectionCard(_ collection: SettingsCollectionOption) -> some View {
+        HStack(alignment: .top, spacing: 14) {
+            collectionCover(collection)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(collection.title)
+                    .font(.headline)
+                Text(collection.subtitle)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text("\(collection.artworkCount) works")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+                    .padding(.top, 1)
+                downloadControl(collection)
+                    .padding(.top, 4)
+            }
+
+            Spacer(minLength: 12)
+
+            activationToggle(collection)
+        }
+        .padding(14)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Color(nsColor: .controlBackgroundColor))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .strokeBorder(Color(nsColor: .separatorColor), lineWidth: 0.5)
+        )
+    }
+
+    private func collectionCover(_ collection: SettingsCollectionOption) -> some View {
+        ZStack {
+            coverPlaceholder(collection)
+            if let url = collection.coverURL, let image = NSImage(contentsOf: url) {
+                Image(nsImage: image)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .transition(.opacity)
+            }
+        }
+        .frame(width: 128, height: 72)
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .strokeBorder(Color(nsColor: .separatorColor), lineWidth: 0.5)
+        )
+    }
+
+    /// Gradient + serif initial shown until the cover image loads (or if none).
+    private func coverPlaceholder(_ collection: SettingsCollectionOption) -> some View {
+        let hue = Self.stableHue(collection.id)
+        return LinearGradient(
+            colors: [
+                Color(hue: hue, saturation: 0.42, brightness: 0.62),
+                Color(hue: (hue + 0.07).truncatingRemainder(dividingBy: 1), saturation: 0.5, brightness: 0.4)
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+        .overlay(
+            Text(String(collection.title.prefix(1)).uppercased())
+                .font(.system(size: 28, weight: .semibold, design: .serif))
+                .foregroundStyle(.white.opacity(0.92))
+        )
+    }
+
+    /// Activation lives top-right as a single native switch: in rotation or not.
+    @ViewBuilder
+    private func activationToggle(_ collection: SettingsCollectionOption) -> some View {
+        let isLastEnabled = collection.isEnabled && !collection.isToggleEnabled
+        Toggle("", isOn: Binding(
+            get: { collection.isEnabled },
+            set: { value in onCollectionChanged(collection.id, value) }
+        ))
+        .toggleStyle(.switch)
+        .labelsHidden()
+        .disabled(isLastEnabled)
+        .help(isLastEnabled
+              ? "At least one collection must stay in rotation"
+              : (collection.isEnabled ? "In rotation" : "Add to rotation. Images stream on demand."))
+    }
+
+    /// A quiet secondary line under the work count: download, progress, or saved.
+    @ViewBuilder
+    private func downloadControl(_ collection: SettingsCollectionOption) -> some View {
+        switch collection.downloadState {
+        case .fullyDownloaded:
+            Label("Saved offline", systemImage: "checkmark.icloud")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .help("Every image in this collection is on disk")
+        case let .downloadable(remaining):
+            Button {
+                onDownloadCollection(collection.id)
+            } label: {
+                Label("Download \(remaining)", systemImage: "arrow.down.circle")
+                    .font(.caption)
+            }
+            .buttonStyle(.borderless)
+            .foregroundStyle(.secondary)
+            .help("Download all \(remaining) images for offline use")
+        case let .downloading(completed, total):
+            HStack(spacing: 6) {
+                ProgressView(value: Double(completed), total: Double(max(total, 1)))
+                    .frame(width: 90)
+                Text("\(completed)/\(total)")
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
+                Button {
+                    onCancelDownloadCollection(collection.id)
+                } label: {
+                    Image(systemName: "stop.circle")
+                }
+                .buttonStyle(.borderless)
+                .foregroundStyle(.secondary)
+                .help("Stop downloading")
+            }
+        }
+    }
+
+    /// Deterministic 0..<1 hue from the collection id (String.hashValue is
+    /// randomized per launch, so roll a stable FNV-1a instead).
+    private static func stableHue(_ string: String) -> Double {
+        var hash: UInt64 = 0xcbf29ce484222325
+        for byte in string.utf8 {
+            hash = (hash ^ UInt64(byte)) &* 0x100000001b3
+        }
+        return Double(hash % 360) / 360.0
     }
 
     private var artworkTypesPane: some View {
@@ -390,6 +552,10 @@ private struct SettingsView: View {
 
                 LabeledContent("Downloaded Collections") {
                     Text("\(snapshot.downloadedCollectionCount)")
+                }
+
+                LabeledContent("Available from Mirror") {
+                    Text("\(snapshot.mirrorCollectionCount)")
                 }
             }
 
