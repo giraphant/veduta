@@ -122,12 +122,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SettingsWindowControll
     private func updateStatusItemVisibility() {
         if preferences.showMenuBarIcon {
             if statusItem == nil {
-                statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-                if let button = statusItem?.button {
+                let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+                // A stable autosave identity makes macOS remember this item's
+                // menu-bar slot and restore it to a consistent position, instead
+                // of occasionally parking it off-screen on multi-display setups.
+                item.autosaveName = "VedutaMenuBarItem"
+                if let button = item.button {
                     let image = menuBarIcon()
                     image?.isTemplate = true
                     button.image = image
                 }
+                item.isVisible = true
+                statusItem = item
             }
             rebuildMenu(message: statusMessage)
         } else if let statusItem {
@@ -140,9 +146,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SettingsWindowControll
     private func menuBarIcon() -> NSImage? {
         if let url = Bundle.main.url(forResource: "menubar-icon", withExtension: "pdf"),
            let image = NSImage(contentsOf: url) {
-            // Slightly narrower-than-tall artwork (187x192) so the glyph reads
-            // a touch slimmer and claims a bit less horizontal space.
-            image.size = NSSize(width: 17.5, height: 18)
+            // Square artwork (192x192) with the mountains glyph centred and
+            // some built-in vertical padding. Keep it tall enough to read
+            // clearly in the bar; trim the width a little so it's slimmer
+            // than a full square without squashing the glyph.
+            image.size = NSSize(width: 15, height: 17)
             return image
         }
         let config = NSImage.SymbolConfiguration(pointSize: 14, weight: .semibold)
