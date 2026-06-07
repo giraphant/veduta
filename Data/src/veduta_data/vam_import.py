@@ -15,6 +15,12 @@ VAM_API_URL = "https://api.vam.ac.uk/v2/objects/search"
 VAM_IIIF_BASE = "https://framemark.vam.ac.uk/collections"
 USER_AGENT = "Veduta/0.1 (vam-import; local user)"
 
+# Kept in sync with the downstream sparse-metadata audit: a work whose resolved
+# creator or title lands here is placeholder-only and would be culled after
+# import (the V&A "painting" set is ~85% anonymous catalogue entries), leaving an
+# empty collection. Rejecting them at the source keeps import and audit aligned.
+PLACEHOLDER_CREATORS = {"", "unknown", "unknown artist", "unidentified artist", "anonymous"}
+
 FAMOUS_CREATORS = {
     "beardsley",
     "blake",
@@ -50,11 +56,12 @@ def fetch_vam_records(
     records: list[dict[str, Any]] = []
     page = 1
     while len(records) < fetch_limit:
-        current_limit = min(page_size, fetch_limit - len(records))
+        # Always page a full window: we filter most rows out below, so sizing the
+        # request to the remaining count would stall once anonymous works dominate.
         params = {
             "q_object_type": object_type,
             "images_exist": "1",
-            "page_size": str(current_limit),
+            "page_size": str(page_size),
             "page": str(page),
         }
         url = VAM_API_URL + "?" + urllib.parse.urlencode(params)
@@ -67,6 +74,10 @@ def fetch_vam_records(
         for raw_record in batch:
             if len(records) >= fetch_limit:
                 break
+            # Cheap gate on the search row before spending two API round-trips
+            # (image info + detail) resolving metadata the audit would reject.
+            if not _search_record_promising(raw_record):
+                continue
             record = dict(raw_record)
             image_id = _image_id(record)
             if image_id:
@@ -77,6 +88,25 @@ def fetch_vam_records(
             records.append(record)
         page += 1
     return records
+
+
+def _search_record_promising(record: dict[str, Any]) -> bool:
+    """Pre-filter on the fields a search row already carries, so anonymous or
+    untitled works are dropped before the per-record detail/image fetches."""
+    maker = record.get("_primaryMaker")
+    name = str(maker.get("name") or "").strip() if isinstance(maker, dict) else ""
+    if _is_placeholder_creator(name):
+        return False
+    return not _is_placeholder_title(str(record.get("_primaryTitle") or ""))
+
+
+def _is_placeholder_creator(creator: str) -> bool:
+    return creator.strip().lower() in PLACEHOLDER_CREATORS
+
+
+def _is_placeholder_title(title: str) -> bool:
+    normalized = title.strip().lower()
+    return not normalized or normalized.startswith("untitled")
 
 
 def fetch_vam_image_info(image_id: str) -> dict[str, int]:
@@ -101,8 +131,19 @@ def fetch_vam_object_record(system_number: str) -> dict[str, Any]:
     return record
 
 
-def import_vam_api(*, fetch_limit: int, keep_limit: int, min_long_edge: int = 3840) -> SourceLibrary:
-    return import_vam_records(fetch_vam_records(fetch_limit), limit=keep_limit, min_long_edge=min_long_edge)
+def import_vam_api(
+    *,
+    fetch_limit: int,
+    keep_limit: int,
+    min_long_edge: int = 3840,
+    max_per_creator: int | None = None,
+) -> SourceLibrary:
+    return import_vam_records(
+        fetch_vam_records(fetch_limit),
+        limit=keep_limit,
+        min_long_edge=min_long_edge,
+        max_per_creator=max_per_creator,
+    )
 
 
 def import_vam_records(
@@ -110,17 +151,26 @@ def import_vam_records(
     *,
     limit: int,
     min_long_edge: int = 3840,
+    max_per_creator: int | None = None,
 ) -> SourceLibrary:
     candidates = [record for record in records if _is_usable_record(record, min_long_edge=min_long_edge)]
     candidates.sort(key=score_vam_record, reverse=True)
 
     used_ids: set[str] = set()
+    per_creator: dict[str, int] = {}
     artworks: list[SourceArtwork] = []
     for record in candidates:
         if len(artworks) >= limit:
             break
         title = _title(record)
         creator = _creator_name(record)
+        # Cap each artist so a single deep series (e.g. one painter's altar-vessel
+        # set) can't crowd out the collection's variety.
+        if max_per_creator is not None:
+            creator_key = creator.strip().lower()
+            if per_creator.get(creator_key, 0) >= max_per_creator:
+                continue
+            per_creator[creator_key] = per_creator.get(creator_key, 0) + 1
         artwork_id = unique_artwork_id(_short_slug(f"{creator} {title}"), used_ids)
         system_number = str(record.get("systemNumber") or "")
         image_id = _image_id(record)
@@ -188,6 +238,10 @@ def score_vam_record(record: dict[str, Any]) -> float:
 
 def _is_usable_record(record: dict[str, Any], *, min_long_edge: int) -> bool:
     if not _has_informative_metadata(record):
+        return False
+    # Backstop after detail/description recovery has run: a work that still
+    # resolves to a placeholder creator or title would be culled by the audit.
+    if _is_placeholder_creator(_creator_name(record)) or _is_placeholder_title(_title(record)):
         return False
     image_id = _image_id(record)
     if not image_id:

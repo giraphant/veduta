@@ -122,10 +122,12 @@ def import_smithsonian(args: argparse.Namespace) -> int:
 
 def import_vam(args: argparse.Namespace) -> int:
     library_root = Path(args.library_root).expanduser()
+    max_per_creator = int(args.max_per_creator)
     library = import_vam_api(
         fetch_limit=int(args.fetch_limit),
         keep_limit=int(args.limit),
         min_long_edge=int(args.min_long_edge),
+        max_per_creator=max_per_creator if max_per_creator > 0 else None,
     )
     upsert_metadata_collections(library, library_root)
     total = sum(len(collection.artworks) for collection in library.collections)
@@ -476,6 +478,7 @@ def build_parser() -> argparse.ArgumentParser:
     vam_parser.add_argument("--fetch-limit", type=int, default=300)
     vam_parser.add_argument("--limit", type=int, default=100)
     vam_parser.add_argument("--min-long-edge", type=int, default=3840)
+    vam_parser.add_argument("--max-per-creator", type=int, default=3, help="0 disables the per-artist cap")
     vam_parser.set_defaults(func=import_vam)
 
     ycba_parser = subcommands.add_parser("import-ycba")

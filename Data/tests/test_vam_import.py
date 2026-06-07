@@ -73,10 +73,11 @@ def test_import_vam_records_keeps_high_resolution_landscape_paintings_and_sorts_
     collection = library.collections[0]
     assert collection.id == "vam"
     assert collection.title == "Victoria and Albert Museum"
+    # `unknown_artist` ("Known Title" by "Unknown") is dropped: a real title is
+    # not enough once the creator stays a placeholder.
     assert [artwork.title for artwork in collection.artworks] == [
         "A River Landscape",
         "Study of Trees",
-        "Known Title",
     ]
 
     artwork = collection.artworks[0]
@@ -99,6 +100,19 @@ def test_import_vam_records_deduplicates_repeated_creator_title_records():
         "j-m-w-turner-a-river-landscape",
         "j-m-w-turner-a-river-landscape-2",
     ]
+
+
+def test_import_vam_records_caps_artworks_per_creator():
+    records = [
+        vam_record(system_number=f"O{i}", title=f"Series Plate {i}", image_id=f"img-{i}")
+        for i in range(6)
+    ]
+
+    library = import_vam_records(records, limit=10, min_long_edge=2500, max_per_creator=3)
+
+    artworks = library.collections[0].artworks
+    assert len(artworks) == 3
+    assert all(artwork.creator == "J. M. W. Turner" for artwork in artworks)
 
 
 def test_import_vam_records_uses_detail_description_to_replace_untitled_summary():
