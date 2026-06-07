@@ -27,6 +27,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SettingsWindowControll
     private let loginItem = LoginItemService()
     private let picker = RandomArtworkPicker()
     private let wallpaperService = WallpaperService()
+    private let cacheJanitor = WallpaperCacheJanitor()
+    private var wallpaperCacheSizeBytes: Int64 = 0
     private lazy var settingsWindowController: SettingsWindowController = {
         let controller = SettingsWindowController()
         controller.delegate = self
@@ -70,6 +72,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SettingsWindowControll
         showSettingsWindow()
         rotateWallpaper()
         rescheduleTimer()
+        maintainWallpaperCache(prune: preferences.automaticCacheCleanupEnabled)
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -465,6 +468,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SettingsWindowControll
                 try wallpaperService.setWallpapers(imageURLs: result.selections.map { $0.imageURL })
                 currentSelections = result.selections
                 rebuildMenu(message: "Ready")
+                // Setting wallpapers is what grows the agent's render cache, so
+                // trim it right after (only when the user opted in).
+                maintainWallpaperCache(prune: preferences.automaticCacheCleanupEnabled)
             } catch {
                 rebuildMenu(message: "Veduta error: \(error.localizedDescription)")
             }
@@ -603,11 +609,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SettingsWindowControll
         }
     }
 
+    /// Recompute the wallpaper render cache size for display, optionally pruning
+    /// it to the size cap first. Both the directory scan and the deletes run off
+    /// the main thread. When `prune` is false this only refreshes the figure
+    /// shown in Settings.
+    private func maintainWallpaperCache(prune shouldPrune: Bool) {
+        let janitor = cacheJanitor
+        let cap = AppPreferences.cacheCleanupCapBytes
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            if shouldPrune {
+                janitor.prune(toMaxBytes: cap)
+            }
+            let size = janitor.currentSizeBytes()
+            DispatchQueue.main.async {
+                self?.wallpaperCacheSizeBytes = size
+                self?.updateSettingsWindow()
+            }
+        }
+    }
+
     private func showSettingsWindow() {
         updateSettingsWindow()
         settingsWindowController.showWindow(nil)
         NSApp.activate(ignoringOtherApps: true)
         refreshCollectionsAsync()
+        // Refresh the displayed cache size without pruning when just viewing.
+        maintainWallpaperCache(prune: false)
     }
 
     private func updateSettingsWindow() {
@@ -620,6 +647,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SettingsWindowControll
             showDockIcon: preferences.showDockIcon,
             launchAtLogin: loginItem.isEnabled,
             launchAtLoginSupported: loginItem.isSupported,
+            automaticCacheCleanupEnabled: preferences.automaticCacheCleanupEnabled,
+            wallpaperCacheSizeBytes: wallpaperCacheSizeBytes,
             rotationIntervalSeconds: rotationIntervalSeconds,
             rotationOptions: rotationIntervalOptions.map { SettingsRotationOption(title: $0.title, seconds: $0.seconds) },
             collections: collectionSummaries.map { summary in
@@ -708,6 +737,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SettingsWindowControll
             rebuildMenu(message: "Veduta error: \(error.localizedDescription)")
         }
         updateSettingsWindow()
+    }
+
+    func settingsWindowController(_ controller: SettingsWindowController, didChangeAutomaticCacheCleanup enabled: Bool) {
+        preferences.automaticCacheCleanupEnabled = enabled
+        updateSettingsWindow()
+        // Turning it on should take effect immediately, not wait for the next rotation.
+        maintainWallpaperCache(prune: enabled)
+    }
+
+    func settingsWindowControllerDidRequestCleanWallpaperCache(_ controller: SettingsWindowController) {
+        maintainWallpaperCache(prune: true)
     }
 
     func settingsWindowController(_ controller: SettingsWindowController, didChangeRotationInterval seconds: TimeInterval?) {

@@ -49,6 +49,8 @@ struct SettingsSnapshot: Equatable {
     let showDockIcon: Bool
     let launchAtLogin: Bool
     let launchAtLoginSupported: Bool
+    let automaticCacheCleanupEnabled: Bool
+    let wallpaperCacheSizeBytes: Int64
     let rotationIntervalSeconds: TimeInterval?
     let rotationOptions: [SettingsRotationOption]
     let collections: [SettingsCollectionOption]
@@ -65,6 +67,8 @@ struct SettingsSnapshot: Equatable {
         showDockIcon: false,
         launchAtLogin: false,
         launchAtLoginSupported: true,
+        automaticCacheCleanupEnabled: false,
+        wallpaperCacheSizeBytes: 0,
         rotationIntervalSeconds: 30 * 60,
         rotationOptions: [],
         collections: [],
@@ -82,6 +86,8 @@ protocol SettingsWindowControllerDelegate: AnyObject {
     func settingsWindowController(_ controller: SettingsWindowController, didChangeMenuBarIconVisibility isVisible: Bool)
     func settingsWindowController(_ controller: SettingsWindowController, didChangeDockIconVisibility isVisible: Bool)
     func settingsWindowController(_ controller: SettingsWindowController, didChangeLaunchAtLogin enabled: Bool)
+    func settingsWindowController(_ controller: SettingsWindowController, didChangeAutomaticCacheCleanup enabled: Bool)
+    func settingsWindowControllerDidRequestCleanWallpaperCache(_ controller: SettingsWindowController)
     func settingsWindowController(_ controller: SettingsWindowController, didChangeRotationInterval seconds: TimeInterval?)
     func settingsWindowController(_ controller: SettingsWindowController, didSetCollection collectionID: String, isEnabled: Bool)
     func settingsWindowController(_ controller: SettingsWindowController, didRequestDownloadCollection collectionID: String)
@@ -184,6 +190,14 @@ final class SettingsWindowController: NSWindowController {
                 guard let self else { return }
                 self.delegate?.settingsWindowController(self, didChangeLaunchAtLogin: enabled)
             },
+            onAutomaticCacheCleanupChanged: { [weak self] enabled in
+                guard let self else { return }
+                self.delegate?.settingsWindowController(self, didChangeAutomaticCacheCleanup: enabled)
+            },
+            onCleanWallpaperCache: { [weak self] in
+                guard let self else { return }
+                self.delegate?.settingsWindowControllerDidRequestCleanWallpaperCache(self)
+            },
             onRotationChanged: { [weak self] seconds in
                 guard let self else { return }
                 self.delegate?.settingsWindowController(self, didChangeRotationInterval: seconds)
@@ -226,6 +240,8 @@ private struct SettingsView: View {
     let onMenuBarChanged: (Bool) -> Void
     let onDockChanged: (Bool) -> Void
     let onLaunchAtLoginChanged: (Bool) -> Void
+    let onAutomaticCacheCleanupChanged: (Bool) -> Void
+    let onCleanWallpaperCache: () -> Void
     let onRotationChanged: (TimeInterval?) -> Void
     let onCollectionChanged: (String, Bool) -> Void
     let onDownloadCollection: (String) -> Void
@@ -244,6 +260,8 @@ private struct SettingsView: View {
         onMenuBarChanged: @escaping (Bool) -> Void,
         onDockChanged: @escaping (Bool) -> Void,
         onLaunchAtLoginChanged: @escaping (Bool) -> Void,
+        onAutomaticCacheCleanupChanged: @escaping (Bool) -> Void,
+        onCleanWallpaperCache: @escaping () -> Void,
         onRotationChanged: @escaping (TimeInterval?) -> Void,
         onCollectionChanged: @escaping (String, Bool) -> Void,
         onDownloadCollection: @escaping (String) -> Void,
@@ -258,6 +276,8 @@ private struct SettingsView: View {
         self.onMenuBarChanged = onMenuBarChanged
         self.onDockChanged = onDockChanged
         self.onLaunchAtLoginChanged = onLaunchAtLoginChanged
+        self.onAutomaticCacheCleanupChanged = onAutomaticCacheCleanupChanged
+        self.onCleanWallpaperCache = onCleanWallpaperCache
         self.onRotationChanged = onRotationChanged
         self.onCollectionChanged = onCollectionChanged
         self.onDownloadCollection = onDownloadCollection
@@ -329,12 +349,34 @@ private struct SettingsView: View {
                 ))
             }
 
+            Section("Storage") {
+                LabeledContent("Wallpaper render cache") {
+                    Text(Self.formatBytes(snapshot.wallpaperCacheSizeBytes))
+                        .monospacedDigit()
+                }
+
+                Toggle("Automatically trim the cache", isOn: Binding(
+                    get: { snapshot.automaticCacheCleanupEnabled },
+                    set: { value in onAutomaticCacheCleanupChanged(value) }
+                ))
+
+                Text("macOS keeps a large, ever-growing cache of decoded wallpapers and never clears it on its own. When this is on, Veduta keeps the most recent renders and removes older ones once the cache passes 5 GB. Deleted files are rebuilt by macOS as needed.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+
+                Button("Clean Up Now", action: onCleanWallpaperCache)
+            }
+
             Section("Recovery") {
                 Text("If both icons are hidden, open Veduta again from Finder or Spotlight to show this window.")
                     .foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)
+    }
+
+    private static func formatBytes(_ bytes: Int64) -> String {
+        ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
     }
 
     private var wallpaperPane: some View {

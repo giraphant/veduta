@@ -7,9 +7,14 @@ public final class AppPreferences {
         public static let rotationIntervalSeconds = "rotationIntervalSeconds"
         public static let showMenuBarIcon = "showMenuBarIcon"
         public static let showDockIcon = "showDockIcon"
+        public static let automaticCacheCleanupEnabled = "automaticCacheCleanupEnabled"
     }
 
     public static let defaultRotationIntervalSeconds: TimeInterval = 30 * 60
+
+    /// Size cap for the wallpaper agent's render cache when automatic cleanup is
+    /// on. Above this, the oldest renders are pruned after each rotation.
+    public static let cacheCleanupCapBytes: Int64 = 5 * 1024 * 1024 * 1024
 
     private let defaults: UserDefaults
 
@@ -51,6 +56,15 @@ public final class AppPreferences {
     public var showDockIcon: Bool {
         get { bool(forKey: Keys.showDockIcon, defaultValue: false) }
         set { defaults.set(newValue, forKey: Keys.showDockIcon) }
+    }
+
+    /// Opt-in: prune the macOS wallpaper render cache when it exceeds
+    /// `cacheCleanupCapBytes`. Off by default — the user enables it knowingly
+    /// since it deletes files in another app's container (safely; see
+    /// `WallpaperCacheJanitor`).
+    public var automaticCacheCleanupEnabled: Bool {
+        get { bool(forKey: Keys.automaticCacheCleanupEnabled, defaultValue: false) }
+        set { defaults.set(newValue, forKey: Keys.automaticCacheCleanupEnabled) }
     }
 
     private func bool(forKey key: String, defaultValue: Bool) -> Bool {
