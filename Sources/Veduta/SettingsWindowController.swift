@@ -47,6 +47,8 @@ struct SettingsArtworkKindOption: Identifiable, Equatable {
 struct SettingsSnapshot: Equatable {
     let showMenuBarIcon: Bool
     let showDockIcon: Bool
+    let launchAtLogin: Bool
+    let launchAtLoginSupported: Bool
     let rotationIntervalSeconds: TimeInterval?
     let rotationOptions: [SettingsRotationOption]
     let collections: [SettingsCollectionOption]
@@ -61,6 +63,8 @@ struct SettingsSnapshot: Equatable {
     static let empty = SettingsSnapshot(
         showMenuBarIcon: true,
         showDockIcon: false,
+        launchAtLogin: false,
+        launchAtLoginSupported: true,
         rotationIntervalSeconds: 30 * 60,
         rotationOptions: [],
         collections: [],
@@ -77,6 +81,7 @@ struct SettingsSnapshot: Equatable {
 protocol SettingsWindowControllerDelegate: AnyObject {
     func settingsWindowController(_ controller: SettingsWindowController, didChangeMenuBarIconVisibility isVisible: Bool)
     func settingsWindowController(_ controller: SettingsWindowController, didChangeDockIconVisibility isVisible: Bool)
+    func settingsWindowController(_ controller: SettingsWindowController, didChangeLaunchAtLogin enabled: Bool)
     func settingsWindowController(_ controller: SettingsWindowController, didChangeRotationInterval seconds: TimeInterval?)
     func settingsWindowController(_ controller: SettingsWindowController, didSetCollection collectionID: String, isEnabled: Bool)
     func settingsWindowController(_ controller: SettingsWindowController, didRequestDownloadCollection collectionID: String)
@@ -175,6 +180,10 @@ final class SettingsWindowController: NSWindowController {
                 guard let self else { return }
                 self.delegate?.settingsWindowController(self, didChangeDockIconVisibility: isVisible)
             },
+            onLaunchAtLoginChanged: { [weak self] enabled in
+                guard let self else { return }
+                self.delegate?.settingsWindowController(self, didChangeLaunchAtLogin: enabled)
+            },
             onRotationChanged: { [weak self] seconds in
                 guard let self else { return }
                 self.delegate?.settingsWindowController(self, didChangeRotationInterval: seconds)
@@ -216,6 +225,7 @@ private struct SettingsView: View {
     let onPaneChanged: (SettingsPane) -> Void
     let onMenuBarChanged: (Bool) -> Void
     let onDockChanged: (Bool) -> Void
+    let onLaunchAtLoginChanged: (Bool) -> Void
     let onRotationChanged: (TimeInterval?) -> Void
     let onCollectionChanged: (String, Bool) -> Void
     let onDownloadCollection: (String) -> Void
@@ -233,6 +243,7 @@ private struct SettingsView: View {
         onPaneChanged: @escaping (SettingsPane) -> Void,
         onMenuBarChanged: @escaping (Bool) -> Void,
         onDockChanged: @escaping (Bool) -> Void,
+        onLaunchAtLoginChanged: @escaping (Bool) -> Void,
         onRotationChanged: @escaping (TimeInterval?) -> Void,
         onCollectionChanged: @escaping (String, Bool) -> Void,
         onDownloadCollection: @escaping (String) -> Void,
@@ -246,6 +257,7 @@ private struct SettingsView: View {
         self.onPaneChanged = onPaneChanged
         self.onMenuBarChanged = onMenuBarChanged
         self.onDockChanged = onDockChanged
+        self.onLaunchAtLoginChanged = onLaunchAtLoginChanged
         self.onRotationChanged = onRotationChanged
         self.onCollectionChanged = onCollectionChanged
         self.onDownloadCollection = onDownloadCollection
@@ -296,6 +308,15 @@ private struct SettingsView: View {
 
     private var settingsPane: some View {
         Form {
+            if snapshot.launchAtLoginSupported {
+                Section("Startup") {
+                    Toggle("Open Veduta at login", isOn: Binding(
+                        get: { snapshot.launchAtLogin },
+                        set: { value in onLaunchAtLoginChanged(value) }
+                    ))
+                }
+            }
+
             Section("App Visibility") {
                 Toggle("Show menu bar icon", isOn: Binding(
                     get: { snapshot.showMenuBarIcon },

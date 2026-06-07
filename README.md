@@ -73,7 +73,7 @@ make run-app                     # run the menu-bar app
 
 1. **Data pipeline** — metadata and Essentials import work; other collections still need a high-res source.
 2. **Menu-bar app** — read the local library, pick a random artwork, set it as wallpaper, basic controls. *(done)*
-3. **Better local app** — intervals, collection filters, favorites, artwork details, launch at login.
+3. **Better local app** — intervals, collection filters, launch at login work; favorites and artwork details still to come.
 4. **Self-hosted mirror** — manifests and images published to a self-hosted S3 origin (Garage), app streams them local-first with upstream fallback and provenance. *(done)*
 5. **Public release** — app bundle, icon, signing, notarization, GitHub Releases. *(done)*
 

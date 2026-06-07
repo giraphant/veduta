@@ -24,6 +24,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SettingsWindowControll
     private var enabledArtworkKinds = Set(ArtworkKind.allCases)
     private var rotationIntervalSeconds: TimeInterval? = AppPreferences.defaultRotationIntervalSeconds
     private let preferences = AppPreferences()
+    private let loginItem = LoginItemService()
     private let picker = RandomArtworkPicker()
     private let wallpaperService = WallpaperService()
     private lazy var settingsWindowController: SettingsWindowController = {
@@ -617,6 +618,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SettingsWindowControll
         SettingsSnapshot(
             showMenuBarIcon: preferences.showMenuBarIcon,
             showDockIcon: preferences.showDockIcon,
+            launchAtLogin: loginItem.isEnabled,
+            launchAtLoginSupported: loginItem.isSupported,
             rotationIntervalSeconds: rotationIntervalSeconds,
             rotationOptions: rotationIntervalOptions.map { SettingsRotationOption(title: $0.title, seconds: $0.seconds) },
             collections: collectionSummaries.map { summary in
@@ -695,6 +698,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SettingsWindowControll
 
     func settingsWindowController(_ controller: SettingsWindowController, didChangeDockIconVisibility isVisible: Bool) {
         preferences.showDockIcon = isVisible
+        updateSettingsWindow()
+    }
+
+    func settingsWindowController(_ controller: SettingsWindowController, didChangeLaunchAtLogin enabled: Bool) {
+        do {
+            try loginItem.setEnabled(enabled)
+        } catch {
+            rebuildMenu(message: "Veduta error: \(error.localizedDescription)")
+        }
         updateSettingsWindow()
     }
 
