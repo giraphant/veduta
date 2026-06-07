@@ -1,15 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" width="176pt" height="176pt" viewBox="8 -2 176 176">
-  <g
-    fill="none"
-    stroke="#000"
-    stroke-width="14"
-    stroke-linecap="round"
-    stroke-linejoin="round">
-    <circle cx="126" cy="36" r="18"/>
-    <path d="M 18 154 L 66 58 L 116 154"/>
-    <path d="M 90 154 L 134 82 L 174 154"/>
-    <path d="M 38 116 H 94"/>
-    <path d="M 18 154 H 174"/>
-  </g>
+<!-- Phosphor "Mountains" (fill) glyph, viewBox cropped tight to the artwork. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="256pt" height="184pt" viewBox="0 24 256 184" fill="#000000">
+  <!-- stroke (same color) thickens the filled mountain bands ~10% without redrawing geometry -->
+  <path stroke="#000000" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round" d="M164,80a28,28,0,1,0-28-28A28,28,0,0,0,164,80Zm0-40a12,12,0,1,1-12,12A12,12,0,0,1,164,40Zm90.88,155.92-54.56-92.08A15.87,15.87,0,0,0,186.55,96h0a15.85,15.85,0,0,0-13.76,7.84L146.63,148l-44.84-76.1a16,16,0,0,0-27.58,0L1.11,195.94A8,8,0,0,0,8,208H248a8,8,0,0,0,6.88-12.08ZM88,80l23.57,40H64.43ZM22,192l33-56h66l18.74,31.8,0,0L154,192Zm150.57,0-16.66-28.28L186.55,112,234,192Z"/>
 </svg>

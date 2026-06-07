@@ -196,7 +196,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SettingsWindowControll
             // The PDF viewBox is cropped tight to the glyph, so NSStatusItem
             // only adds one layer of menu-bar padding. Keep a standard 18pt
             // height and derive width from the asset aspect ratio.
-            let targetHeight: CGFloat = 18
+            let targetHeight: CGFloat = 15
             let aspect = image.size.height > 0 ? image.size.width / image.size.height : 1
             image.size = NSSize(width: targetHeight * aspect, height: targetHeight)
             return image
