@@ -69,7 +69,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SettingsWindowControll
         installMainMenu()
         applyDockActivationPolicy()
         updateStatusItemVisibility()
-        showSettingsWindow()
+        if shouldShowSettingsWindowOnLaunch {
+            showSettingsWindow()
+        } else {
+            refreshCollectionsAsync()
+        }
         rotateWallpaper()
         rescheduleTimer()
         maintainWallpaperCache(prune: preferences.automaticCacheCleanupEnabled)
@@ -212,6 +216,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SettingsWindowControll
 
     private func applyDockActivationPolicy() {
         NSApp.setActivationPolicy(preferences.showDockIcon ? .regular : .accessory)
+    }
+
+    private var shouldShowSettingsWindowOnLaunch: Bool {
+        // If both visible entry points are disabled, launching the app is the
+        // recovery path back to Settings. Otherwise startup should stay quiet.
+        !preferences.showMenuBarIcon && !preferences.showDockIcon
     }
 
     private var rotationIntervalOptions: [(title: String, seconds: TimeInterval?)] {
