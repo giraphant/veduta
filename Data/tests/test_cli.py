@@ -364,8 +364,8 @@ def vam_library() -> SourceLibrary:
 def test_import_vam_writes_collection_manifest(tmp_path, monkeypatch):
     calls = []
 
-    def fake_import_vam_api(*, fetch_limit, keep_limit, min_long_edge):
-        calls.append((fetch_limit, keep_limit, min_long_edge))
+    def fake_import_vam_api(*, fetch_limit, keep_limit, min_long_edge, max_per_creator):
+        calls.append((fetch_limit, keep_limit, min_long_edge, max_per_creator))
         return vam_library()
 
     monkeypatch.setattr(cli, "import_vam_api", fake_import_vam_api)
@@ -379,7 +379,7 @@ def test_import_vam_writes_collection_manifest(tmp_path, monkeypatch):
     ])
 
     assert result == 0
-    assert calls == [(50, 5, 2500)]
+    assert calls == [(50, 5, 2500, 3)]
     catalog = json.loads((tmp_path / "catalog.json").read_text(encoding="utf-8"))
     assert catalog["collections"][0]["id"] == "vam"
     collection = json.loads((tmp_path / "collections" / "vam.json").read_text(encoding="utf-8"))
