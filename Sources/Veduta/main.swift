@@ -69,11 +69,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SettingsWindowControll
         installMainMenu()
         applyDockActivationPolicy()
         updateStatusItemVisibility()
-        if shouldShowSettingsWindowOnLaunch {
-            showSettingsWindow()
-        } else {
-            refreshCollectionsAsync()
-        }
+        // Startup stays quiet: never pop the Settings window on launch. It's
+        // reachable on demand — menu-bar "Open Veduta", the Dock icon, or
+        // re-launching the app (applicationShouldHandleReopen).
+        refreshCollectionsAsync()
         rotateWallpaper()
         rescheduleTimer()
         maintainWallpaperCache(prune: preferences.automaticCacheCleanupEnabled)
@@ -216,12 +215,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SettingsWindowControll
 
     private func applyDockActivationPolicy() {
         NSApp.setActivationPolicy(preferences.showDockIcon ? .regular : .accessory)
-    }
-
-    private var shouldShowSettingsWindowOnLaunch: Bool {
-        // If both visible entry points are disabled, launching the app is the
-        // recovery path back to Settings. Otherwise startup should stay quiet.
-        !preferences.showMenuBarIcon && !preferences.showDockIcon
     }
 
     private var rotationIntervalOptions: [(title: String, seconds: TimeInterval?)] {
