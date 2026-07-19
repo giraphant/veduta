@@ -26,7 +26,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let preferences = AppPreferences()
     private let loginItem = LoginItemService()
     private let picker = RandomArtworkPicker()
-    private let wallpaperService = WallpaperService()
     private let cacheJanitor = WallpaperCacheJanitor()
     private var wallpaperCacheSizeBytes: Int64 = 0
     private lazy var settingsWindowController: SettingsWindowController = {
@@ -362,7 +361,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 saveEnabledCollectionIDs()
             }
             do {
-                try wallpaperService.setWallpapers(imageURLs: result.selections.map { $0.imageURL })
+                try setWallpapers(imageURLs: result.selections.map { $0.imageURL })
                 currentSelections = result.selections
                 rebuildMenu(message: "Ready")
                 // Setting wallpapers is what grows the agent's render cache, so
@@ -375,6 +374,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             rebuildMenu(message: "Veduta error: \(error.localizedDescription)")
         }
         updateSettingsWindow()
+    }
+
+    /// Cycle the picked images across all screens.
+    private func setWallpapers(imageURLs: [URL]) throws {
+        guard !imageURLs.isEmpty else { return }
+        for (index, screen) in NSScreen.screens.enumerated() {
+            try NSWorkspace.shared.setDesktopImageURL(imageURLs[index % imageURLs.count], for: screen, options: [:])
+        }
     }
 
     /// Ensure each picked artwork has a local image, downloading from the

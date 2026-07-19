@@ -80,7 +80,6 @@ API_IMPORTS = [
         "command": "import-chicago-api",
         "label": "Art Institute of Chicago",
         "import_fn": "import_chicago_api",
-        "legacy_collection_id": "chicago-api",
         "options": {
             "--fetch-limit": dict(type=int, default=250),
             "--limit": dict(type=int, default=100),
@@ -180,30 +179,10 @@ def run_api_import(args: argparse.Namespace) -> int:
         kwargs.update(extra)
     library_root = Path(args.library_root).expanduser()
     library = globals()[spec["import_fn"]](**kwargs)
-    legacy_id = spec.get("legacy_collection_id")
-    if legacy_id:
-        remove_legacy_collection(library_root, legacy_id)
     upsert_metadata_collections(library, library_root)
     total = sum(len(collection.artworks) for collection in library.collections)
     print(f"Imported {spec['label']} collection with {total} artworks into {args.library_root}")
     return 0
-
-
-def remove_legacy_collection(library_root: Path, collection_id: str) -> None:
-    catalog_path = library_root / "catalog.json"
-    if not catalog_path.exists():
-        return
-    catalog = json.loads(catalog_path.read_text(encoding="utf-8"))
-    collections = list(catalog.get("collections") or [])
-    removed_manifests = [
-        str(collection.get("manifest"))
-        for collection in collections
-        if collection.get("id") == collection_id and collection.get("manifest")
-    ]
-    catalog["collections"] = [collection for collection in collections if collection.get("id") != collection_id]
-    catalog_path.write_text(json.dumps(catalog, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    for manifest in removed_manifests:
-        (library_root / manifest).unlink(missing_ok=True)
 
 
 def is_http_url(value: object) -> bool:
