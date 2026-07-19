@@ -150,20 +150,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             menu.addItem(currentWallpapersItem)
         }
 
-        if !collectionSummaries.isEmpty {
-            let collectionsItem = NSMenuItem(title: "Collections", action: nil, keyEquivalent: "")
-            collectionsItem.submenu = collectionsMenu()
-            menu.addItem(collectionsItem)
-        }
-
-        let artworkKindsItem = NSMenuItem(title: "Artwork Types", action: nil, keyEquivalent: "")
-        artworkKindsItem.submenu = artworkKindsMenu()
-        menu.addItem(artworkKindsItem)
-
-        let rotationItem = NSMenuItem(title: "Rotation Interval", action: nil, keyEquivalent: "")
-        rotationItem.submenu = rotationIntervalMenu()
-        menu.addItem(rotationItem)
-
         menu.addItem(.separator())
 
         let quitItem = NSMenuItem(title: "Quit Veduta", action: #selector(quit), keyEquivalent: "q")
@@ -261,57 +247,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return menu
     }
 
-    private func collectionsMenu() -> NSMenu {
-        let menu = NSMenu()
-        for summary in collectionSummaries {
-            let item = NSMenuItem(title: summary.shortName, action: #selector(toggleCollection(_:)), keyEquivalent: "")
-            item.target = self
-            item.representedObject = summary.id
-            item.state = enabledCollectionIDs.contains(summary.id) ? .on : .off
-            item.isEnabled = collectionSummaries.count > 1 && (!enabledCollectionIDs.contains(summary.id) || enabledCollectionIDs.count > 1)
-            menu.addItem(item)
-        }
-        return menu
-    }
-
-    private func artworkKindsMenu() -> NSMenu {
-        let menu = NSMenu()
-        for kind in ArtworkKind.allCases {
-            let item = NSMenuItem(title: kind.displayName, action: #selector(toggleArtworkKind(_:)), keyEquivalent: "")
-            item.target = self
-            item.representedObject = kind.rawValue
-            item.state = enabledArtworkKinds.contains(kind) ? .on : .off
-            item.isEnabled = !enabledArtworkKinds.contains(kind) || enabledArtworkKinds.count > 1
-            menu.addItem(item)
-        }
-        return menu
-    }
-
-    private func rotationIntervalMenu() -> NSMenu {
-        let menu = NSMenu()
-        for option in rotationIntervalOptions {
-            let item = NSMenuItem(title: option.title, action: #selector(setRotationInterval(_:)), keyEquivalent: "")
-            item.target = self
-            item.representedObject = NSNumber(value: option.seconds ?? 0)
-            item.state = rotationIntervalSeconds == option.seconds ? .on : .off
-            menu.addItem(item)
-        }
-        return menu
-    }
-
     @objc private func openMainWindow() { showSettingsWindow() }
 
     @objc private func nextWallpaper() { rotateWallpaper(preferDownloaded: true) }
-
-    @objc private func setRotationInterval(_ sender: NSMenuItem) {
-        guard let value = sender.representedObject as? NSNumber else { return }
-        let seconds = value.doubleValue
-        rotationIntervalSeconds = seconds > 0 ? seconds : nil
-        saveRotationInterval()
-        rescheduleTimer()
-        rebuildMenu(message: "Ready")
-        updateSettingsWindow()
-    }
 
     @objc private func revealImageFile(_ sender: NSMenuItem) {
         guard let imageURL = sender.representedObject as? URL else { return }
@@ -321,34 +259,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func openSourcePage(_ sender: NSMenuItem) {
         guard let sourceURL = sender.representedObject as? URL else { return }
         NSWorkspace.shared.open(sourceURL)
-    }
-
-    @objc private func toggleCollection(_ sender: NSMenuItem) {
-        guard let collectionID = sender.representedObject as? String else { return }
-        if enabledCollectionIDs.contains(collectionID) {
-            guard enabledCollectionIDs.count > 1 else { return }
-            enabledCollectionIDs.remove(collectionID)
-        } else {
-            enabledCollectionIDs.insert(collectionID)
-        }
-        saveEnabledCollectionIDs()
-        rebuildMenu(message: "Ready")
-        updateSettingsWindow()
-    }
-
-    @objc private func toggleArtworkKind(_ sender: NSMenuItem) {
-        guard let rawValue = sender.representedObject as? String,
-              let kind = ArtworkKind(rawValue: rawValue)
-        else { return }
-        if enabledArtworkKinds.contains(kind) {
-            guard enabledArtworkKinds.count > 1 else { return }
-            enabledArtworkKinds.remove(kind)
-        } else {
-            enabledArtworkKinds.insert(kind)
-        }
-        saveEnabledArtworkKinds()
-        rebuildMenu(message: "Ready")
-        updateSettingsWindow()
     }
 
     /// `preferDownloaded` picks only from images already on disk so a manual
