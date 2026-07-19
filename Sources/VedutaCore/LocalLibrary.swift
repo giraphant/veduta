@@ -155,7 +155,7 @@ public final class LocalLibrary {
             if let collectionIDs, !collectionIDs.contains(summary.id) { continue }
             let collection = try loadCollection(summary)
             for artwork in collection.artworks
-            where isAvailable(artwork, in: summary.id, enabledArtworkKinds: enabledArtworkKinds) {
+            where isAvailable(artwork, enabledArtworkKinds: enabledArtworkKinds) {
                 result.append((artwork, wallpaperURL(for: artwork)))
             }
         }
@@ -186,15 +186,15 @@ public final class LocalLibrary {
 
     private func isAvailable(
         _ artwork: Artwork,
-        in collectionID: String,
         enabledArtworkKinds: Set<ArtworkKind>?
     ) -> Bool {
         guard artwork.images.wallpaper.excluded != true else { return false }
         let localExists = FileManager.default.fileExists(atPath: wallpaperURL(for: artwork).path)
         guard localExists || mirrorEligible(artwork) else { return false }
         guard let enabledArtworkKinds else { return true }
-        let kind = ArtworkKindClassifier.kind(for: artwork, collectionID: collectionID)
-        return enabledArtworkKinds.contains(kind)
+        // ponytail: the pipeline always writes classification.kind; .other only
+        // covers hand-edited or pre-classification manifests.
+        return enabledArtworkKinds.contains(artwork.classification?.kind ?? .other)
     }
 
     private func mirrorEligible(_ artwork: Artwork) -> Bool {
@@ -232,7 +232,7 @@ public final class LocalLibrary {
             let collection = try loadCollection(summary)
             for artwork in collection.artworks {
                 let url = wallpaperURL(for: artwork)
-                if isDownloaded(artwork, in: summary.id, enabledArtworkKinds: enabledArtworkKinds) {
+                if isDownloaded(artwork, enabledArtworkKinds: enabledArtworkKinds) {
                     downloadedArtworks.append((artwork, url))
                 }
             }
@@ -243,14 +243,14 @@ public final class LocalLibrary {
 
     private func isDownloaded(
         _ artwork: Artwork,
-        in collectionID: String,
         enabledArtworkKinds: Set<ArtworkKind>?
     ) -> Bool {
         guard artwork.images.wallpaper.excluded != true else { return false }
         guard FileManager.default.fileExists(atPath: wallpaperURL(for: artwork).path) else { return false }
         guard let enabledArtworkKinds else { return true }
-        let kind = ArtworkKindClassifier.kind(for: artwork, collectionID: collectionID)
-        return enabledArtworkKinds.contains(kind)
+        // ponytail: the pipeline always writes classification.kind; .other only
+        // covers hand-edited or pre-classification manifests.
+        return enabledArtworkKinds.contains(artwork.classification?.kind ?? .other)
     }
 
     private func decode<T: Decodable>(_ type: T.Type, from url: URL) throws -> T {
