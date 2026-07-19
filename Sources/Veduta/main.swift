@@ -10,7 +10,7 @@ final class CancellationToken {
     func cancel() { lock.lock(); cancelled = true; lock.unlock() }
 }
 
-final class AppDelegate: NSObject, NSApplicationDelegate, SettingsWindowControllerDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem?
     private var currentSelections: [(artwork: Artwork, imageURL: URL)] = []
     private var collectionSummaries: [CollectionSummary] = []
@@ -31,7 +31,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SettingsWindowControll
     private var wallpaperCacheSizeBytes: Int64 = 0
     private lazy var settingsWindowController: SettingsWindowController = {
         let controller = SettingsWindowController()
-        controller.delegate = self
+        controller.actions = makeSettingsActions()
         return controller
     }()
     private var timer: Timer?
@@ -54,7 +54,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SettingsWindowControll
     /// The published mirror images and manifests stream from when they aren't
     /// present locally. Defaults to the public origin; override the base URL
     /// with `VEDUTA_MIRROR_BASE_URL`, or disable streaming with
-    /// `VEDUTA_MIRROR=off` (then the app is purely local, as before).
+    /// `VEDUTA_MIRROR=off` (then the app is purely local).
     private static func makeMirror() -> MirrorClient? {
         let environment = ProcessInfo.processInfo.environment
         if environment["VEDUTA_MIRROR"] == "off" { return nil }
@@ -201,8 +201,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SettingsWindowControll
         if let url = Bundle.main.url(forResource: "menubar-icon", withExtension: "pdf"),
            let image = NSImage(contentsOf: url) {
             // The PDF viewBox is cropped tight to the glyph, so NSStatusItem
-            // only adds one layer of menu-bar padding. Keep a standard 18pt
-            // height and derive width from the asset aspect ratio.
+            // only adds one layer of menu-bar padding. Fix the height and
+            // derive width from the asset aspect ratio.
             let targetHeight: CGFloat = 15
             let aspect = image.size.height > 0 ? image.size.width / image.size.height : 1
             image.size = NSSize(width: targetHeight * aspect, height: targetHeight)
@@ -293,21 +293,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SettingsWindowControll
             let item = NSMenuItem(title: option.title, action: #selector(setRotationInterval(_:)), keyEquivalent: "")
             item.target = self
             item.representedObject = NSNumber(value: option.seconds ?? 0)
-            item.state = rotationIntervalMatches(rotationIntervalSeconds, option.seconds) ? .on : .off
+            item.state = rotationIntervalSeconds == option.seconds ? .on : .off
             menu.addItem(item)
         }
         return menu
-    }
-
-    private func rotationIntervalMatches(_ lhs: TimeInterval?, _ rhs: TimeInterval?) -> Bool {
-        switch (lhs, rhs) {
-        case (.none, .none):
-            return true
-        case let (.some(lhs), .some(rhs)):
-            return abs(lhs - rhs) < 0.5
-        default:
-            return false
-        }
     }
 
     @objc private func openMainWindow() { showSettingsWindow() }
@@ -381,7 +370,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SettingsWindowControll
             guard let self else { return }
             let outcome: Result<RotationResult, Error>
             do {
-                let state = try self.loadCollectionsState()
+                let state = CollectionsState(availability: try self.library.collectionAvailability())
                 let enabled = self.resolveEnabledCollections(
                     requested: requestedCollections,
                     shown: state.summaries,
@@ -424,11 +413,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SettingsWindowControll
         let state: CollectionsState
         let enabled: Set<String>
         let selections: [(artwork: Artwork, imageURL: URL)]
-    }
-
-    /// Count, per collection, what's local vs still only on the mirror.
-    private func loadCollectionsState() throws -> CollectionsState {
-        CollectionsState(availability: try library.collectionAvailability())
     }
 
     private func applyCollectionsState(_ state: CollectionsState) {
@@ -569,7 +553,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SettingsWindowControll
     private func refreshCollectionsAsync() {
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self else { return }
-            let state = try? self.loadCollectionsState()
+            let state = (try? self.library.collectionAvailability()).map(CollectionsState.init)
             DispatchQueue.main.async {
                 guard let state, !state.summaries.isEmpty else { return }
                 self.applyCollectionsState(state)
@@ -722,94 +706,96 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SettingsWindowControll
         }
     }
 
-    func settingsWindowController(_ controller: SettingsWindowController, didChangeMenuBarIconVisibility isVisible: Bool) {
-        preferences.showMenuBarIcon = isVisible
-        updateStatusItemVisibility()
-        updateSettingsWindow()
-    }
-
-    func settingsWindowController(_ controller: SettingsWindowController, didChangeDockIconVisibility isVisible: Bool) {
-        preferences.showDockIcon = isVisible
-        updateSettingsWindow()
-    }
-
-    func settingsWindowController(_ controller: SettingsWindowController, didChangeLaunchAtLogin enabled: Bool) {
-        do {
-            try loginItem.setEnabled(enabled)
-        } catch {
-            rebuildMenu(message: "Veduta error: \(error.localizedDescription)")
-        }
-        updateSettingsWindow()
-    }
-
-    func settingsWindowController(_ controller: SettingsWindowController, didChangeAutomaticCacheCleanup enabled: Bool) {
-        preferences.automaticCacheCleanupEnabled = enabled
-        updateSettingsWindow()
-        // Turning it on should take effect immediately, not wait for the next rotation.
-        maintainWallpaperCache(prune: enabled)
-    }
-
-    func settingsWindowControllerDidRequestCleanWallpaperCache(_ controller: SettingsWindowController) {
-        maintainWallpaperCache(prune: true)
-    }
-
-    func settingsWindowController(_ controller: SettingsWindowController, didChangeRotationInterval seconds: TimeInterval?) {
-        rotationIntervalSeconds = seconds
-        saveRotationInterval()
-        rescheduleTimer()
-        rebuildMenu(message: "Ready")
-        updateSettingsWindow()
-    }
-
-    func settingsWindowController(_ controller: SettingsWindowController, didSetCollection collectionID: String, isEnabled: Bool) {
-        if isEnabled {
-            enabledCollectionIDs.insert(collectionID)
-        } else {
-            guard enabledCollectionIDs.count > 1 else {
-                updateSettingsWindow()
-                return
+    // Weak captures: the window controller retains these closures, and
+    // AppDelegate retains the window controller — strong self would cycle.
+    private func makeSettingsActions() -> SettingsActions {
+        SettingsActions(
+            setMenuBarIconVisible: { [weak self] isVisible in
+                guard let self else { return }
+                self.preferences.showMenuBarIcon = isVisible
+                self.updateStatusItemVisibility()
+                self.updateSettingsWindow()
+            },
+            setDockIconVisible: { [weak self] isVisible in
+                guard let self else { return }
+                self.preferences.showDockIcon = isVisible
+                self.updateSettingsWindow()
+            },
+            setLaunchAtLogin: { [weak self] enabled in
+                guard let self else { return }
+                do {
+                    try self.loginItem.setEnabled(enabled)
+                } catch {
+                    self.rebuildMenu(message: "Veduta error: \(error.localizedDescription)")
+                }
+                self.updateSettingsWindow()
+            },
+            setAutomaticCacheCleanup: { [weak self] enabled in
+                guard let self else { return }
+                self.preferences.automaticCacheCleanupEnabled = enabled
+                self.updateSettingsWindow()
+                // Take effect immediately, not on the next rotation.
+                self.maintainWallpaperCache(prune: enabled)
+            },
+            cleanWallpaperCache: { [weak self] in
+                self?.maintainWallpaperCache(prune: true)
+            },
+            setRotationInterval: { [weak self] seconds in
+                guard let self else { return }
+                self.rotationIntervalSeconds = seconds
+                self.saveRotationInterval()
+                self.rescheduleTimer()
+                self.rebuildMenu(message: "Ready")
+                self.updateSettingsWindow()
+            },
+            setCollectionEnabled: { [weak self] collectionID, isEnabled in
+                guard let self else { return }
+                if isEnabled {
+                    self.enabledCollectionIDs.insert(collectionID)
+                } else {
+                    guard self.enabledCollectionIDs.count > 1 else {
+                        self.updateSettingsWindow()
+                        return
+                    }
+                    self.enabledCollectionIDs.remove(collectionID)
+                }
+                self.saveEnabledCollectionIDs()
+                self.rebuildMenu(message: "Ready")
+                self.updateSettingsWindow()
+            },
+            downloadCollection: { [weak self] collectionID in
+                self?.startCollectionDownload(collectionID)
+            },
+            cancelCollectionDownload: { [weak self] collectionID in
+                guard let self else { return }
+                self.cancelCollectionDownload(collectionID)
+                self.updateSettingsWindow()
+            },
+            setArtworkKindEnabled: { [weak self] kind, isEnabled in
+                guard let self else { return }
+                if isEnabled {
+                    self.enabledArtworkKinds.insert(kind)
+                } else {
+                    guard self.enabledArtworkKinds.count > 1 else {
+                        self.updateSettingsWindow()
+                        return
+                    }
+                    self.enabledArtworkKinds.remove(kind)
+                }
+                self.saveEnabledArtworkKinds()
+                self.rebuildMenu(message: "Ready")
+                self.updateSettingsWindow()
+            },
+            nextWallpaper: { [weak self] in
+                self?.rotateWallpaper(preferDownloaded: true)
+            },
+            openLibraryFolder: { [weak self] in
+                self?.openLibraryFolder()
+            },
+            quit: { [weak self] in
+                self?.quit()
             }
-            enabledCollectionIDs.remove(collectionID)
-        }
-        saveEnabledCollectionIDs()
-        rebuildMenu(message: "Ready")
-        updateSettingsWindow()
-    }
-
-    func settingsWindowController(_ controller: SettingsWindowController, didSetArtworkKind kind: ArtworkKind, isEnabled: Bool) {
-        if isEnabled {
-            enabledArtworkKinds.insert(kind)
-        } else {
-            guard enabledArtworkKinds.count > 1 else {
-                updateSettingsWindow()
-                return
-            }
-            enabledArtworkKinds.remove(kind)
-        }
-        saveEnabledArtworkKinds()
-        rebuildMenu(message: "Ready")
-        updateSettingsWindow()
-    }
-
-    func settingsWindowController(_ controller: SettingsWindowController, didRequestDownloadCollection collectionID: String) {
-        startCollectionDownload(collectionID)
-    }
-
-    func settingsWindowController(_ controller: SettingsWindowController, didRequestCancelDownloadCollection collectionID: String) {
-        cancelCollectionDownload(collectionID)
-        updateSettingsWindow()
-    }
-
-    func settingsWindowControllerDidRequestNextWallpaper(_ controller: SettingsWindowController) {
-        rotateWallpaper(preferDownloaded: true)
-    }
-
-    func settingsWindowControllerDidRequestOpenLibraryFolder(_ controller: SettingsWindowController) {
-        openLibraryFolder()
-    }
-
-    func settingsWindowControllerDidRequestQuit(_ controller: SettingsWindowController) {
-        quit()
+        )
     }
 
     @objc private func openLibraryFolder() { NSWorkspace.shared.open(library.root) }

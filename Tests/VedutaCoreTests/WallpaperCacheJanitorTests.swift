@@ -44,12 +44,10 @@ final class WallpaperCacheJanitorTests: XCTestCase {
         let newest = try writeRender("new-2560-1600-0-c.bmp", bytes: 1000, ageDays: 1)
 
         let janitor = WallpaperCacheJanitor(cacheDirectory: cacheDir)
-        let result = janitor.prune(toMaxBytes: 1500)
+        XCTAssertEqual(janitor.currentSizeBytes(), 3000)
+        janitor.prune(toMaxBytes: 1500)
 
-        XCTAssertEqual(result.bytesBefore, 3000)
-        XCTAssertEqual(result.filesRemoved, 2)
-        XCTAssertEqual(result.bytesFreed, 2000)
-        XCTAssertEqual(result.bytesAfter, 1000)
+        XCTAssertEqual(janitor.currentSizeBytes(), 1000)
         // The two oldest go; the newest render is preserved.
         XCTAssertFalse(FileManager.default.fileExists(atPath: oldest.path))
         XCTAssertFalse(FileManager.default.fileExists(atPath: middle.path))
@@ -57,12 +55,11 @@ final class WallpaperCacheJanitorTests: XCTestCase {
     }
 
     func testPruneIsNoOpWhenUnderCap() throws {
-        _ = try writeRender("a-2560-1600-0-a.bmp", bytes: 1000, ageDays: 1)
+        let render = try writeRender("a-2560-1600-0-a.bmp", bytes: 1000, ageDays: 1)
         let janitor = WallpaperCacheJanitor(cacheDirectory: cacheDir)
 
-        let result = janitor.prune(toMaxBytes: 5000)
-        XCTAssertEqual(result.filesRemoved, 0)
-        XCTAssertEqual(result.bytesFreed, 0)
+        janitor.prune(toMaxBytes: 5000)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: render.path))
         XCTAssertEqual(janitor.currentSizeBytes(), 1000)
     }
 
@@ -75,9 +72,8 @@ final class WallpaperCacheJanitorTests: XCTestCase {
         try Data(count: 4000).write(to: victim)
 
         let janitor = WallpaperCacheJanitor(cacheDirectory: stray)
-        let result = janitor.prune(toMaxBytes: 0)
+        janitor.prune(toMaxBytes: 0)
 
-        XCTAssertEqual(result.filesRemoved, 0)
         XCTAssertEqual(janitor.currentSizeBytes(), 0, "Unsafe paths report no renders")
         XCTAssertTrue(FileManager.default.fileExists(atPath: victim.path), "Files outside the cache are never touched")
     }

@@ -94,7 +94,7 @@ def collect_files(library_root: Path) -> list[Path]:
     return files
 
 
-def make_client(args: argparse.Namespace):
+def make_client():
     try:
         import boto3
         from botocore.config import Config
@@ -132,16 +132,6 @@ def make_client(args: argparse.Namespace):
             request_checksum_calculation="when_required",
             response_checksum_validation="when_required",
         ),
-    )
-
-
-def _transfer_config():
-    from boto3.s3.transfer import TransferConfig
-
-    return TransferConfig(
-        multipart_threshold=16 * 1024 * 1024,
-        multipart_chunksize=16 * 1024 * 1024,
-        max_concurrency=4,
     )
 
 
@@ -186,14 +176,23 @@ def main() -> int:
     if prefix and not prefix.endswith("/"):
         prefix += "/"
 
-    client = None if args.dry_run else make_client(args)
+    client = None if args.dry_run else make_client()
     bucket = os.environ.get("GARAGE_BUCKET", "")
     if args.dry_run and not bucket:
         bucket = "<bucket>"  # dry-run does not require credentials
 
-    # Gentle multipart settings so a small/constrained Garage isn't flooded:
-    # fewer concurrent part uploads and larger parts (fewer total requests).
-    transfer_config = None if args.dry_run else _transfer_config()
+    if args.dry_run:
+        transfer_config = None
+    else:
+        # Gentle multipart settings so a small/constrained Garage isn't flooded:
+        # fewer concurrent part uploads and larger parts (fewer total requests).
+        from boto3.s3.transfer import TransferConfig
+
+        transfer_config = TransferConfig(
+            multipart_threshold=16 * 1024 * 1024,
+            multipart_chunksize=16 * 1024 * 1024,
+            max_concurrency=4,
+        )
 
     existing = {} if args.dry_run else list_remote(client, bucket, prefix)
     if not args.dry_run:

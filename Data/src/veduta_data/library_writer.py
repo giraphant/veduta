@@ -10,6 +10,21 @@ from veduta_data.models import SourceCollection, SourceLibrary
 
 IMAGE_SUFFIXES = ["s0", "s8192", "s6000", "s5120", "s4096"]
 
+# IIIF hosts get a ladder of size fallbacks; the rest are direct-download URLs.
+IIIF_SIZE_FALLBACKS = {
+    "https://www.artic.edu/iiif/2/": ["4096,", "3400,", "3000,", "2500,", "1600,", "1200,", "843,"],
+    "https://api.nga.gov/iiif/": ["4096,", "3400,", "3000,", "2500,", "1600,", "1200,"],
+    "https://ids.lib.harvard.edu/ids/iiif/": ["3400,", "3000,", "2500,", "1600,", "1200,"],
+    "https://framemark.vam.ac.uk/collections/": ["4096,", "3400,", "3000,", "2500,", "1600,", "1200,"],
+    "https://images.collections.yale.edu/iiif/2/": ["!4096,4096", "3400,", "3000,", "2500,", "1600,", "1200,"],
+    "https://media.getty.edu/iiif/image/": ["4096,", "3400,", "3000,", "2500,", "1600,", "1200,"],
+}
+PASSTHROUGH_PREFIXES = (
+    "https://ids.si.edu/ids/download",
+    "https://images.metmuseum.org/",
+    "https://openaccess-cdn.clevelandart.org/",
+)
+
 # Curated per-collection cover images (the museum's signature work), kept in
 # the repo so regenerating the catalog re-applies them. Maps collection id ->
 # library-relative image path.
@@ -27,76 +42,69 @@ def collection_covers() -> dict[str, str]:
 def candidate_image_urls(image_base: str) -> list[str]:
     if "|" in image_base:
         return [url for url in image_base.split("|") if url]
-    if image_base.startswith("https://www.artic.edu/iiif/2/"):
-        return [
-            re.sub(r"/full/[^/]+/0/default\.jpg$", f"/full/{size}/0/default.jpg", image_base)
-            for size in ["4096,", "3400,", "3000,", "2500,", "1600,", "1200,", "843,"]
-        ]
-    if image_base.startswith("https://api.nga.gov/iiif/"):
-        return [
-            re.sub(r"/full/[^/]+/0/default\.jpg$", f"/full/{size}/0/default.jpg", image_base)
-            for size in ["4096,", "3400,", "3000,", "2500,", "1600,", "1200,"]
-        ]
-    if image_base.startswith("https://ids.lib.harvard.edu/ids/iiif/"):
-        return [
-            re.sub(r"/full/[^/]+/0/default\.jpg$", f"/full/{size}/0/default.jpg", image_base)
-            for size in ["3400,", "3000,", "2500,", "1600,", "1200,"]
-        ]
-    if image_base.startswith("https://framemark.vam.ac.uk/collections/"):
-        return [
-            re.sub(r"/full/[^/]+/0/default\.jpg$", f"/full/{size}/0/default.jpg", image_base)
-            for size in ["4096,", "3400,", "3000,", "2500,", "1600,", "1200,"]
-        ]
-    if image_base.startswith("https://images.collections.yale.edu/iiif/2/"):
-        return [
-            re.sub(r"/full/[^/]+/0/default\.jpg$", f"/full/{size}/0/default.jpg", image_base)
-            for size in ["!4096,4096", "3400,", "3000,", "2500,", "1600,", "1200,"]
-        ]
-    if image_base.startswith("https://media.getty.edu/iiif/image/"):
-        return [
-            re.sub(r"/full/[^/]+/0/default\.jpg$", f"/full/{size}/0/default.jpg", image_base)
-            for size in ["4096,", "3400,", "3000,", "2500,", "1600,", "1200,"]
-        ]
-    if image_base.startswith("https://ids.si.edu/ids/download"):
-        return [image_base]
-    if image_base.startswith("https://images.metmuseum.org/"):
-        return [image_base]
-    if image_base.startswith("https://openaccess-cdn.clevelandart.org/"):
+    for prefix, sizes in IIIF_SIZE_FALLBACKS.items():
+        if image_base.startswith(prefix):
+            return [
+                re.sub(r"/full/[^/]+/0/default\.jpg$", f"/full/{size}/0/default.jpg", image_base)
+                for size in sizes
+            ]
+    if image_base.startswith(PASSTHROUGH_PREFIXES):
         return [image_base]
     clean_base = image_base.split("=")[0]
     return [f"{clean_base}={suffix}" for suffix in IMAGE_SUFFIXES]
 
 
-def wallpaper_file_extension(image_base: str) -> str:
-    return "jpg"
-
-
 def wallpaper_local_path(collection_id: str, artwork_id: str, image_base: str) -> str:
-    return f"images/{collection_id}/{artwork_id}.{wallpaper_file_extension(image_base)}"
+    return f"images/{collection_id}/{artwork_id}.jpg"
 
 
-def write_json(path: Path, value: object) -> None:
+def atomic_write(path: Path, write) -> None:
+    """Write via a sibling tempfile + rename; `write` receives the open binary file."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    json_text = json.dumps(value, ensure_ascii=False, indent=2) + "\n"
     temp_path: Path | None = None
 
     try:
         with tempfile.NamedTemporaryFile(
-            "w",
-            encoding="utf-8",
+            "wb",
             dir=path.parent,
             prefix=f".{path.name}.",
             suffix=".tmp",
             delete=False,
         ) as temp_file:
             temp_path = Path(temp_file.name)
-            temp_file.write(json_text)
+            write(temp_file)
 
         temp_path.replace(path)
     except Exception:
         if temp_path is not None:
             temp_path.unlink(missing_ok=True)
         raise
+
+
+def write_json(path: Path, value: object) -> None:
+    json_text = json.dumps(value, ensure_ascii=False, indent=2) + "\n"
+    atomic_write(path, lambda temp_file: temp_file.write(json_text.encode("utf-8")))
+
+
+def load_catalog(library_root: Path) -> dict[str, object]:
+    return json.loads((library_root / "catalog.json").read_text(encoding="utf-8"))
+
+
+def load_collection(library_root: Path, manifest: str) -> dict[str, object]:
+    return json.loads((library_root / manifest).read_text(encoding="utf-8"))
+
+
+def selected_collections(catalog: dict[str, object], collection_id: str | None, all_collections: bool) -> list[dict[str, object]]:
+    collections = list(catalog["collections"])
+    if all_collections:
+        return collections
+    if collection_id is None:
+        raise SystemExit("Provide --collection <id> or --all")
+    matches = [collection for collection in collections if collection["id"] == collection_id]
+    if not matches:
+        available = ", ".join(str(collection["id"]) for collection in collections)
+        raise SystemExit(f"Unknown collection {collection_id}. Available: {available}")
+    return matches
 
 
 def now_iso() -> str:

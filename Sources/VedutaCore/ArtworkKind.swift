@@ -1,13 +1,11 @@
 import Foundation
 
-public enum ArtworkKind: String, Codable, Sendable, Equatable, CaseIterable, Identifiable {
+public enum ArtworkKind: String, Sendable, Equatable, CaseIterable {
     case flatArt = "flat-art"
     case photography = "photography"
     case streetArt = "street-art"
     case objectOrDocument = "object-or-document"
     case other = "other"
-
-    public var id: String { rawValue }
 
     public var displayName: String {
         switch self {
@@ -22,10 +20,6 @@ public enum ArtworkKind: String, Codable, Sendable, Equatable, CaseIterable, Ide
 
 public struct ArtworkClassification: Decodable, Sendable, Equatable {
     public let kind: ArtworkKind
-
-    public init(kind: ArtworkKind) {
-        self.kind = kind
-    }
 
     private enum CodingKeys: String, CodingKey {
         case kind

@@ -2,20 +2,25 @@ import hashlib
 import urllib.request
 
 import veduta_data.downloader as downloader
-from veduta_data.downloader import choose_download_state, download_first_working, sha256_file
+from veduta_data.downloader import download_first_working, sha256_file
 
 
-def test_choose_download_state_skips_complete_file(tmp_path):
+def test_download_first_working_skips_existing_high_resolution_file(tmp_path, monkeypatch):
     image_path = tmp_path / "image.jpg"
-    image_path.write_bytes(b"abc")
-    assert choose_download_state(image_path) == "skip"
+    image_path.write_bytes(b"good")
 
+    def fail_download(url, destination):
+        raise AssertionError("should not download when a good file exists")
 
-def test_choose_download_state_retries_partial_file(tmp_path):
-    image_path = tmp_path / "image.jpg"
-    partial_path = tmp_path / "image.jpg.partial"
-    partial_path.write_bytes(b"abc")
-    assert choose_download_state(image_path) == "download"
+    monkeypatch.setattr(downloader, "download_url", fail_download)
+    monkeypatch.setattr(downloader, "image_dimensions", lambda path: (4096, 2650))
+    monkeypatch.setattr(downloader, "verify_decodable_image", lambda path: None)
+
+    result = download_first_working(["https://example.test/image.jpg"], image_path, delay_seconds=0)
+
+    assert result["status"] == "skipped"
+    assert result["url"] is None
+    assert image_path.read_bytes() == b"good"
 
 
 def test_sha256_file_hashes_file_contents(tmp_path):
@@ -24,29 +29,9 @@ def test_sha256_file_hashes_file_contents(tmp_path):
     assert sha256_file(path) == hashlib.sha256(b"veduta").hexdigest()
 
 
-def test_download_url_sends_artic_referer_for_artic_iiif_images(tmp_path, monkeypatch):
+def test_download_url_sends_artic_referer_for_artic_iiif_images(tmp_path, monkeypatch, fake_urlopen):
     seen_requests = []
-
-    class FakeResponse:
-        headers = {"content-type": "image/jpeg"}
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, exc_type, exc, tb):
-            return False
-
-        def read(self, size=-1):
-            if getattr(self, "sent", False):
-                return b""
-            self.sent = True
-            return b"image"
-
-    def fake_urlopen(request, timeout):
-        seen_requests.append(request)
-        return FakeResponse()
-
-    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen(b"image", content_type="image/jpeg", seen=seen_requests))
 
     destination = tmp_path / "image.jpg"
     downloader.download_url(
@@ -58,26 +43,8 @@ def test_download_url_sends_artic_referer_for_artic_iiif_images(tmp_path, monkey
     assert seen_requests[0].headers["Referer"] == "https://www.artic.edu/"
 
 
-def test_download_url_converts_tiff_response_to_high_quality_jpeg_destination(tmp_path, monkeypatch):
+def test_download_url_converts_tiff_response_to_high_quality_jpeg_destination(tmp_path, monkeypatch, fake_urlopen):
     calls = []
-
-    class FakeResponse:
-        headers = {"content-type": "image/tiff"}
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, exc_type, exc, tb):
-            return False
-
-        def read(self, size=-1):
-            if getattr(self, "sent", False):
-                return b""
-            self.sent = True
-            return b"tiff"
-
-    def fake_urlopen(request, timeout):
-        return FakeResponse()
 
     def fake_run(command, text, capture_output, check):
         calls.append(command)
@@ -85,7 +52,7 @@ def test_download_url_converts_tiff_response_to_high_quality_jpeg_destination(tm
         with open(output_path, "wb") as handle:
             handle.write(b"jpeg")
 
-    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen(b"tiff", content_type="image/tiff"))
     monkeypatch.setattr(downloader.subprocess, "run", fake_run)
 
     destination = tmp_path / "image.jpg"

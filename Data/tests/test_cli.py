@@ -98,7 +98,6 @@ def cleveland_library() -> SourceLibrary:
             short_name="Cleveland",
             title="Cleveland Museum of Art",
             expected_artwork_count=1,
-            expected_author_count=1,
             source_sizes_mb={},
             artworks=[
                 SourceArtwork(
@@ -125,7 +124,6 @@ def chicago_api_library() -> SourceLibrary:
             short_name="Chicago",
             title="The Art Institute of Chicago",
             expected_artwork_count=1,
-            expected_author_count=1,
             source_sizes_mb={},
             artworks=[
                 SourceArtwork(
@@ -152,7 +150,6 @@ def nga_library() -> SourceLibrary:
             short_name="NGA",
             title="National Gallery of Art",
             expected_artwork_count=1,
-            expected_author_count=1,
             source_sizes_mb={},
             artworks=[
                 SourceArtwork(
@@ -179,7 +176,6 @@ def harvard_library() -> SourceLibrary:
             short_name="Harvard",
             title="Harvard Art Museums",
             expected_artwork_count=1,
-            expected_author_count=1,
             source_sizes_mb={},
             artworks=[
                 SourceArtwork(
@@ -286,7 +282,6 @@ def smithsonian_library() -> SourceLibrary:
             short_name="Smithsonian",
             title="Smithsonian American Art Museum",
             expected_artwork_count=1,
-            expected_author_count=1,
             source_sizes_mb={},
             artworks=[
                 SourceArtwork(
@@ -342,7 +337,6 @@ def vam_library() -> SourceLibrary:
             short_name="V&A",
             title="Victoria and Albert Museum",
             expected_artwork_count=1,
-            expected_author_count=1,
             source_sizes_mb={},
             artworks=[
                 SourceArtwork(
@@ -402,7 +396,6 @@ def met_library() -> SourceLibrary:
             short_name="Met",
             title="The Metropolitan Museum of Art",
             expected_artwork_count=1,
-            expected_author_count=1,
             source_sizes_mb={},
             artworks=[
                 SourceArtwork(

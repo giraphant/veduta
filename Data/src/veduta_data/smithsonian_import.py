@@ -3,8 +3,8 @@ import urllib.request
 from collections.abc import Iterable
 from typing import Any
 
-from veduta_data.artpaper_import import slugify
-from veduta_data.models import SourceArtwork, SourceCollection, SourceLibrary
+from veduta_data.artpaper_import import short_slug
+from veduta_data.models import SourceArtwork, SourceCollection, SourceLibrary, orientation_score, usable_dimensions
 
 SMITHSONIAN_COLLECTION_ID = "smithsonian"
 SMITHSONIAN_PACK_ID = 1006
@@ -119,7 +119,7 @@ def import_smithsonian_records(
             break
         title = _title(record)
         creator = _creator_name(record)
-        artwork_id = _short_slug(f"{creator} {title}")
+        artwork_id = short_slug(f"{creator} {title}")
         if artwork_id in used_ids:
             continue
         used_ids.add(artwork_id)
@@ -144,7 +144,6 @@ def import_smithsonian_records(
             short_name="Smithsonian",
             title=SMITHSONIAN_TITLE,
             expected_artwork_count=len(artworks),
-            expected_author_count=len({artwork.creator for artwork in artworks}),
             source_sizes_mb={},
             artworks=artworks,
         )
@@ -157,18 +156,11 @@ def score_smithsonian_record(record: dict[str, Any]) -> float:
     height = image_resource.get("height", 0)
     long_edge = max(width, height)
     short_edge = min(width, height)
-    ratio = width / max(height, 1)
     creator = _creator_name(record).lower()
     title = _title(record).lower()
     medium = _medium(record).lower()
     score = long_edge / 1000
-
-    if width > height:
-        score += 8
-        if 1.2 <= ratio <= 2.0:
-            score += 4
-    else:
-        score -= 4
+    score += orientation_score(width, height)
 
     if any(name in creator for name in FAMOUS_CREATORS):
         score += 8
@@ -211,12 +203,7 @@ def _is_usable_record(record: dict[str, Any], *, min_long_edge: int) -> bool:
     height = image_resource.get("height", 0)
     if not isinstance(width, int) or not isinstance(height, int):
         return False
-    if max(width, height) < min_long_edge:
-        return False
-    if width <= height:
-        return False
-    ratio = width / max(height, 1)
-    if not (1.15 <= ratio <= 3.0):
+    if not usable_dimensions(width, height, min_long_edge):
         return False
 
     # Must be a painting
@@ -288,10 +275,3 @@ def _best_image_resource(record: dict[str, Any]) -> dict[str, Any]:
                         "height": resource.get("height", 0),
                     }
     return {}
-
-
-def _short_slug(value: str, max_length: int = 96) -> str:
-    slug = slugify(value)
-    if len(slug) <= max_length:
-        return slug
-    return slug[:max_length].rstrip("-")

@@ -9,10 +9,6 @@ public final class RandomArtworkPicker {
 
     public init() {}
 
-    public func pick(from artworks: [(Artwork, URL)]) throws -> (Artwork, URL) {
-        try pick(count: 1, from: artworks)[0]
-    }
-
     public func pick(count: Int, from artworks: [(Artwork, URL)]) throws -> [(Artwork, URL)] {
         guard !artworks.isEmpty else { throw RandomArtworkPickerError.emptyLibrary }
         guard count > 0 else { return [] }

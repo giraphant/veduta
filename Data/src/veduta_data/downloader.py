@@ -13,12 +13,6 @@ USER_AGENT = "Veduta/0.1 (+https://github.com/veduta/veduta)"
 MAX_FALLBACK_DELAY_SECONDS = 5.0
 
 
-def choose_download_state(final_path: Path) -> str:
-    if final_path.exists() and final_path.stat().st_size > 0:
-        return "skip"
-    return "download"
-
-
 def sha256_file(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as handle:
@@ -109,7 +103,7 @@ def download_first_working(
     delay_seconds: float,
     min_long_edge: int = 3840,
 ) -> dict[str, object]:
-    if choose_download_state(destination) == "skip":
+    if destination.exists() and destination.stat().st_size > 0:
         try:
             width, height = image_dimensions(destination)
             if max(width, height) >= min_long_edge:

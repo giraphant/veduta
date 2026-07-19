@@ -6,7 +6,7 @@ import urllib.request
 from collections.abc import Iterable
 from typing import Any
 
-from veduta_data.artpaper_import import slugify
+from veduta_data.artpaper_import import short_slug
 from veduta_data.models import SourceArtwork, SourceCollection, SourceLibrary
 
 MET_COLLECTION_ID = "met"
@@ -87,7 +87,6 @@ def fetch_met_records(
     *,
     queries: Iterable[str] = DEFAULT_QUERIES,
     fetch_limit: int,
-    per_query_limit: int = 30,
     delay_seconds: float = 0.1,
 ) -> list[dict[str, Any]]:
     object_ids: list[int] = []
@@ -106,7 +105,7 @@ def fetch_met_records(
                 continue
             seen_ids.add(object_id)
             object_ids.append(object_id)
-            if len(object_ids) >= fetch_limit or len(object_ids) >= per_query_limit * len(list(queries)):
+            if len(object_ids) >= fetch_limit:
                 break
         time.sleep(delay_seconds)
 
@@ -135,7 +134,7 @@ def import_met_records(records: Iterable[dict[str, Any]], *, limit: int) -> Sour
             break
         title = str(record.get("title") or "Untitled")
         creator = _creator_name(record)
-        artwork_id = _short_slug(f"{creator} {title}")
+        artwork_id = short_slug(f"{creator} {title}")
         if artwork_id in used_ids:
             continue
         used_ids.add(artwork_id)
@@ -158,7 +157,6 @@ def import_met_records(records: Iterable[dict[str, Any]], *, limit: int) -> Sour
             short_name="Met",
             title=MET_TITLE,
             expected_artwork_count=len(artworks),
-            expected_author_count=len({artwork.creator for artwork in artworks}),
             source_sizes_mb={},
             artworks=artworks,
         )
@@ -206,13 +204,6 @@ def _is_usable_record(record: dict[str, Any]) -> bool:
 
 def _creator_name(record: dict[str, Any]) -> str:
     return str(record.get("artistDisplayName") or "Unknown artist").strip() or "Unknown artist"
-
-
-def _short_slug(value: str, max_length: int = 96) -> str:
-    slug = slugify(value)
-    if len(slug) <= max_length:
-        return slug
-    return slug[:max_length].rstrip("-")
 
 
 def _image_candidates(record: dict[str, Any]) -> str:

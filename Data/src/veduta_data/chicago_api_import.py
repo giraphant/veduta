@@ -4,8 +4,8 @@ import urllib.request
 from collections.abc import Iterable
 from typing import Any
 
-from veduta_data.artpaper_import import slugify, unique_artwork_id
-from veduta_data.models import SourceArtwork, SourceCollection, SourceLibrary
+from veduta_data.artpaper_import import int_value, slugify, unique_artwork_id
+from veduta_data.models import SourceArtwork, SourceCollection, SourceLibrary, orientation_score, usable_dimensions
 
 CHICAGO_COLLECTION_ID = "chicago"
 CHICAGO_PACK_ID = 1002
@@ -137,7 +137,6 @@ def import_chicago_api_records(
         short_name="Chicago",
         title=CHICAGO_TITLE,
         expected_artwork_count=len(artworks),
-        expected_author_count=len({artwork.creator for artwork in artworks}),
         source_sizes_mb={},
         artworks=artworks,
     )
@@ -153,15 +152,8 @@ def score_chicago_api_record(record: dict[str, Any]) -> float:
     width, height = _dimensions(record)
     long_edge = max(width, height)
     short_edge = min(width, height)
-    ratio = width / max(height, 1)
     score = long_edge / 1000
-
-    if width > height:
-        score += 8
-        if 1.2 <= ratio <= 2.0:
-            score += 4
-    else:
-        score -= 4
+    score += orientation_score(width, height)
 
     creator = _creator_name(record).lower()
     title = str(record.get("title") or "").lower()
@@ -191,19 +183,14 @@ def _is_usable_record(record: dict[str, Any], *, min_long_edge: int) -> bool:
     if not record.get("image_id"):
         return False
     width, height = _dimensions(record)
-    if max(width, height) < min_long_edge:
-        return False
-    if width <= height:
-        return False
-    ratio = width / max(height, 1)
-    return 1.15 <= ratio <= 3.0
+    return usable_dimensions(width, height, min_long_edge)
 
 
 def _dimensions(record: dict[str, Any]) -> tuple[int, int]:
     thumbnail = record.get("thumbnail") or {}
     if not isinstance(thumbnail, dict):
         return 0, 0
-    return _int_value(thumbnail.get("width")), _int_value(thumbnail.get("height"))
+    return int_value(thumbnail.get("width")), int_value(thumbnail.get("height"))
 
 
 def _creator_name(record: dict[str, Any]) -> str:
@@ -218,10 +205,3 @@ def _creator_name(record: dict[str, Any]) -> str:
 
 def _iiif_image_url(image_id: str) -> str:
     return f"{CHICAGO_IIIF_URL}/{image_id}/full/{CHICAGO_IMAGE_WIDTH},/0/default.jpg"
-
-
-def _int_value(value: object) -> int:
-    try:
-        return int(str(value))
-    except (TypeError, ValueError):
-        return 0

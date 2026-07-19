@@ -5,8 +5,8 @@ import urllib.request
 from collections.abc import Iterable
 from typing import Any
 
-from veduta_data.artpaper_import import slugify
-from veduta_data.models import SourceArtwork, SourceCollection, SourceLibrary
+from veduta_data.artpaper_import import int_value, short_slug
+from veduta_data.models import SourceArtwork, SourceCollection, SourceLibrary, orientation_score, usable_dimensions
 
 HARVARD_COLLECTION_ID = "harvard"
 HARVARD_PACK_ID = 1005
@@ -142,7 +142,7 @@ def import_harvard_records(
             break
         title = str(record.get("title") or "Untitled")
         creator = _creator_name(record)
-        artwork_id = _short_slug(f"{creator} {title}")
+        artwork_id = short_slug(f"{creator} {title}")
         if artwork_id in used_ids:
             continue
         image = _best_image(record)
@@ -167,7 +167,6 @@ def import_harvard_records(
             short_name="Harvard",
             title=HARVARD_TITLE,
             expected_artwork_count=len(artworks),
-            expected_author_count=len({artwork.creator for artwork in artworks}),
             source_sizes_mb={},
             artworks=artworks,
         )
@@ -176,22 +175,15 @@ def import_harvard_records(
 
 def score_harvard_record(record: dict[str, Any]) -> float:
     image = _best_image(record)
-    width = _int_value(image.get("width"))
-    height = _int_value(image.get("height"))
+    width = int_value(image.get("width"))
+    height = int_value(image.get("height"))
     long_edge = max(width, height)
     short_edge = min(width, height)
-    ratio = width / max(height, 1)
     creator = _creator_name(record).lower()
     title = str(record.get("title") or "").lower()
     medium = str(record.get("medium") or "").lower()
     score = long_edge / 1000
-
-    if width > height:
-        score += 8
-        if 1.2 <= ratio <= 2.0:
-            score += 4
-    else:
-        score -= 4
+    score += orientation_score(width, height)
 
     if any(name in creator for name in FAMOUS_CREATORS):
         score += 8
@@ -200,10 +192,10 @@ def score_harvard_record(record: dict[str, Any]) -> float:
     if "oil" in medium or "paint" in medium:
         score += 3
 
-    score += min(_int_value(record.get("verificationlevel")), 4)
-    score += min(_int_value(record.get("publicationcount")), 6)
-    score += min(_int_value(record.get("exhibitioncount")), 6) * 0.5
-    score += min(_int_value(record.get("totalpageviews")) / 100, 5)
+    score += min(int_value(record.get("verificationlevel")), 4)
+    score += min(int_value(record.get("publicationcount")), 6)
+    score += min(int_value(record.get("exhibitioncount")), 6) * 0.5
+    score += min(int_value(record.get("totalpageviews")) / 100, 5)
     if short_edge >= 2500:
         score += 2
     return score
@@ -211,19 +203,12 @@ def score_harvard_record(record: dict[str, Any]) -> float:
 
 def _is_usable_record(record: dict[str, Any], *, min_long_edge: int) -> bool:
     image_permission = record.get("imagepermissionlevel")
-    if image_permission is None or str(image_permission).strip() == "" or _int_value(image_permission) != 0:
+    if image_permission is None or str(image_permission).strip() == "" or int_value(image_permission) != 0:
         return False
     image = _best_image(record)
     if not image.get("iiifbaseuri"):
         return False
-    width = _int_value(image.get("width"))
-    height = _int_value(image.get("height"))
-    if max(width, height) < min_long_edge:
-        return False
-    if width <= height:
-        return False
-    ratio = width / max(height, 1)
-    if not (1.15 <= ratio <= 3.0):
+    if not usable_dimensions(int_value(image.get("width")), int_value(image.get("height")), min_long_edge):
         return False
     classification = str(record.get("classification") or "").lower()
     medium = str(record.get("medium") or "").lower()
@@ -257,25 +242,11 @@ def _best_image(record: dict[str, Any]) -> dict[str, Any]:
     usable = [image for image in images if isinstance(image, dict) and image.get("iiifbaseuri")]
     if not usable:
         return {}
-    primary = [image for image in usable if _int_value(image.get("displayorder")) == 1]
+    primary = [image for image in usable if int_value(image.get("displayorder")) == 1]
     if primary:
         return primary[0]
-    return max(usable, key=lambda image: _int_value(image.get("width")) * _int_value(image.get("height")))
+    return max(usable, key=lambda image: int_value(image.get("width")) * int_value(image.get("height")))
 
 
 def _iiif_image_url(iiifbaseuri: str) -> str:
     return f"{iiifbaseuri.rstrip('/')}/full/{HARVARD_IMAGE_WIDTH},/0/default.jpg"
-
-
-def _short_slug(value: str, max_length: int = 96) -> str:
-    slug = slugify(value)
-    if len(slug) <= max_length:
-        return slug
-    return slug[:max_length].rstrip("-")
-
-
-def _int_value(value: object) -> int:
-    try:
-        return int(str(value))
-    except (TypeError, ValueError):
-        return 0

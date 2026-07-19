@@ -15,7 +15,6 @@ def sample_library() -> SourceLibrary:
             short_name="Essentials",
             title="Essentials Set",
             expected_artwork_count=1,
-            expected_author_count=1,
             source_sizes_mb={"regular": 0, "hd": 332, "ultrahd": 945},
             artworks=[
                 SourceArtwork(

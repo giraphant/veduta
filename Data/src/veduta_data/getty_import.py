@@ -5,7 +5,7 @@ from collections.abc import Iterable
 from typing import Any
 
 from veduta_data.artpaper_import import slugify, unique_artwork_id
-from veduta_data.models import SourceArtwork, SourceCollection, SourceLibrary
+from veduta_data.models import SourceArtwork, SourceCollection, SourceLibrary, orientation_score, usable_dimensions
 
 GETTY_COLLECTION_ID = "getty"
 GETTY_PACK_ID = 1004
@@ -106,7 +106,6 @@ def import_getty_records(
         short_name="Getty",
         title=GETTY_TITLE,
         expected_artwork_count=len(artworks),
-        expected_author_count=len({artwork.creator for artwork in artworks}),
         source_sizes_mb={},
         artworks=artworks,
     )
@@ -130,13 +129,7 @@ def score_getty_record(record: dict[str, Any]) -> float:
     short_edge = min(width, height)
     score = long_edge / 1000
 
-    if width > height:
-        ratio = width / max(height, 1)
-        score += 8
-        if 1.25 <= ratio <= 2.1:
-            score += 4
-    else:
-        score -= 4
+    score += orientation_score(width, height, 1.25, 2.1)
 
     title = _title(record).lower()
     creator = _creator_name(record).lower()
@@ -154,12 +147,7 @@ def _is_usable_record(record: dict[str, Any], *, min_long_edge: int) -> bool:
         width, height = _image_dimensions(record)
     except ValueError:
         return False
-    if max(width, height) < min_long_edge:
-        return False
-    if width <= height:
-        return False
-    ratio = width / max(height, 1)
-    return 1.15 <= ratio <= 3.0
+    return usable_dimensions(width, height, min_long_edge)
 
 
 def _fetch_json(url: str) -> dict[str, Any]:

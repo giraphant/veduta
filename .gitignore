@@ -18,3 +18,4 @@ Data/library/
 .claude/scheduled_tasks.lock
 .claude/scheduled_tasks.json
 docs/superpowers/
+*.egg-info/

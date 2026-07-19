@@ -34,26 +34,17 @@ def met_record(
     }
 
 
-def test_get_json_retries_transient_forbidden_response(monkeypatch):
+def test_get_json_retries_transient_forbidden_response(monkeypatch, fake_urlopen):
     calls = []
+    respond = fake_urlopen(b'{"ok": true}')
 
-    class FakeResponse:
-        def __enter__(self):
-            return self
-
-        def __exit__(self, exc_type, exc, tb):
-            return False
-
-        def read(self):
-            return b'{"ok": true}'
-
-    def fake_urlopen(request, timeout):
+    def urlopen(request, timeout):
         calls.append(request.full_url)
         if len(calls) == 1:
             raise urllib.error.HTTPError(request.full_url, 403, "Forbidden", hdrs=None, fp=None)
-        return FakeResponse()
+        return respond(request, timeout)
 
-    monkeypatch.setattr(met_import.urllib.request, "urlopen", fake_urlopen)
+    monkeypatch.setattr(met_import.urllib.request, "urlopen", urlopen)
     monkeypatch.setattr(met_import.time, "sleep", lambda seconds: None)
 
     assert met_import._get_json("https://example.test/met") == {"ok": True}
