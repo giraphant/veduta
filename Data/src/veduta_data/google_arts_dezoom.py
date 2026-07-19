@@ -19,7 +19,6 @@ def dezoomify_google_arts(
     retries: int = 2,
     min_width: int | None = None,
     timeout: float = 600,
-    runner=subprocess.run,
 ) -> dict[str, object]:
     if not is_google_arts_asset_url(canonical_page):
         raise ValueError(f"Unsupported Google Arts asset URL: {canonical_page}")
@@ -29,7 +28,7 @@ def dezoomify_google_arts(
     temp_path.unlink(missing_ok=True)
 
     try:
-        runner(
+        subprocess.run(
             [
                 command,
                 "--largest",

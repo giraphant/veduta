@@ -137,38 +137,39 @@ test: test-data test-swift
 import-metadata:
 	cd Data && PYTHONPATH=src python3 -m veduta_data.cli import-metadata --artpaper-app "$(ARTPAPER_APP)" --library-root "$(LIBRARY_ROOT)"
 
+# Flags below only override the CLI's own defaults (Data/src/veduta_data/cli.py).
 import-cleveland:
-	cd Data && PYTHONPATH=src python3 -m veduta_data.cli import-cleveland --library-root "$(LIBRARY_ROOT)" --fetch-limit 250 --limit 100 --min-long-edge 3000
+	cd Data && PYTHONPATH=src python3 -m veduta_data.cli import-cleveland --library-root "$(LIBRARY_ROOT)" --min-long-edge 3000
 
 import-chicago:
-	cd Data && PYTHONPATH=src python3 -m veduta_data.cli import-chicago-api --library-root "$(LIBRARY_ROOT)" --fetch-limit 250 --limit 100 --min-long-edge 3000
+	cd Data && PYTHONPATH=src python3 -m veduta_data.cli import-chicago-api --library-root "$(LIBRARY_ROOT)"
 
 import-met:
-	cd Data && PYTHONPATH=src python3 -m veduta_data.cli import-met --library-root "$(LIBRARY_ROOT)" --fetch-limit 250 --limit 100
+	cd Data && PYTHONPATH=src python3 -m veduta_data.cli import-met --library-root "$(LIBRARY_ROOT)"
 
 import-nga:
-	cd Data && PYTHONPATH=src python3 -m veduta_data.cli import-nga --library-root "$(LIBRARY_ROOT)" --fetch-limit 250 --limit 100 --min-long-edge 3000
+	cd Data && PYTHONPATH=src python3 -m veduta_data.cli import-nga --library-root "$(LIBRARY_ROOT)"
 
 import-harvard:
-	cd Data && PYTHONPATH=src python3 -m veduta_data.cli import-harvard --library-root "$(LIBRARY_ROOT)" --fetch-limit 250 --limit 100 --min-long-edge 3000
+	cd Data && PYTHONPATH=src python3 -m veduta_data.cli import-harvard --library-root "$(LIBRARY_ROOT)"
 
 import-smithsonian:
-	cd Data && PYTHONPATH=src python3 -m veduta_data.cli import-smithsonian --library-root "$(LIBRARY_ROOT)" --fetch-limit 500 --limit 100 --min-long-edge 3000
+	cd Data && PYTHONPATH=src python3 -m veduta_data.cli import-smithsonian --library-root "$(LIBRARY_ROOT)" --min-long-edge 3000
 
 import-vam:
-	cd Data && PYTHONPATH=src python3 -m veduta_data.cli import-vam --library-root "$(LIBRARY_ROOT)" --fetch-limit 1000 --limit 100 --min-long-edge 2500
+	cd Data && PYTHONPATH=src python3 -m veduta_data.cli import-vam --library-root "$(LIBRARY_ROOT)" --fetch-limit 1000 --min-long-edge 2500
 
 import-ycba:
-	cd Data && PYTHONPATH=src python3 -m veduta_data.cli import-ycba --library-root "$(LIBRARY_ROOT)" --fetch-limit 1000 --limit 100 --min-long-edge 2500
+	cd Data && PYTHONPATH=src python3 -m veduta_data.cli import-ycba --library-root "$(LIBRARY_ROOT)"
 
 download-essentials:
-	cd Data && PYTHONPATH=src python3 -m veduta_data.cli download --library-root "$(LIBRARY_ROOT)" --collection essentials --delay 1.0
+	cd Data && PYTHONPATH=src python3 -m veduta_data.cli download --library-root "$(LIBRARY_ROOT)" --collection essentials
 
 import-installed-essentials:
 	cd Data && PYTHONPATH=src python3 -m veduta_data.cli import-installed-packs --library-root "$(LIBRARY_ROOT)" --artpaper-image-root "$(ARTPAPER_IMAGE_ROOT)" --quality 5k --collection essentials
 
 download-all:
-	cd Data && PYTHONPATH=src python3 -m veduta_data.cli download --library-root "$(LIBRARY_ROOT)" --all --delay 1.0
+	cd Data && PYTHONPATH=src python3 -m veduta_data.cli download --library-root "$(LIBRARY_ROOT)" --all
 
 run-app:
 	VEDUTA_LIBRARY_DIR="$(LIBRARY_ROOT)" swift run Veduta

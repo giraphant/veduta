@@ -5,8 +5,8 @@ import urllib.request
 from collections.abc import Iterable
 from typing import Any
 
-from veduta_data.artpaper_import import slugify, unique_artwork_id
-from veduta_data.models import SourceArtwork, SourceCollection, SourceLibrary
+from veduta_data.artpaper_import import int_value, short_slug, unique_artwork_id
+from veduta_data.models import SourceArtwork, SourceCollection, SourceLibrary, orientation_score, usable_dimensions
 
 VAM_COLLECTION_ID = "vam"
 VAM_PACK_ID = 1007
@@ -115,8 +115,8 @@ def fetch_vam_image_info(image_id: str) -> dict[str, int]:
     with urllib.request.urlopen(request, timeout=30) as response:
         payload = json.loads(response.read())
     return {
-        "_imageWidth": _int_value(payload.get("width")),
-        "_imageHeight": _int_value(payload.get("height")),
+        "_imageWidth": int_value(payload.get("width")),
+        "_imageHeight": int_value(payload.get("height")),
     }
 
 
@@ -171,7 +171,7 @@ def import_vam_records(
             if per_creator.get(creator_key, 0) >= max_per_creator:
                 continue
             per_creator[creator_key] = per_creator.get(creator_key, 0) + 1
-        artwork_id = unique_artwork_id(_short_slug(f"{creator} {title}"), used_ids)
+        artwork_id = unique_artwork_id(short_slug(f"{creator} {title}"), used_ids)
         system_number = str(record.get("systemNumber") or "")
         image_id = _image_id(record)
         artworks.append(SourceArtwork(
@@ -194,7 +194,6 @@ def import_vam_records(
             short_name="V&A",
             title=VAM_TITLE,
             expected_artwork_count=len(artworks),
-            expected_author_count=len({artwork.creator for artwork in artworks}),
             source_sizes_mb={},
             artworks=artworks,
         )
@@ -202,19 +201,12 @@ def import_vam_records(
 
 
 def score_vam_record(record: dict[str, Any]) -> float:
-    width = _int_value(record.get("_imageWidth"))
-    height = _int_value(record.get("_imageHeight"))
+    width = int_value(record.get("_imageWidth"))
+    height = int_value(record.get("_imageHeight"))
     long_edge = max(width, height)
     short_edge = min(width, height)
-    ratio = width / max(height, 1)
     score = long_edge / 1000
-
-    if width > height:
-        score += 8
-        if 1.2 <= ratio <= 2.0:
-            score += 4
-    else:
-        score -= 4
+    score += orientation_score(width, height)
 
     current_location = record.get("_currentLocation") or {}
     if isinstance(current_location, dict) and current_location.get("onDisplay") is True:
@@ -251,14 +243,7 @@ def _is_usable_record(record: dict[str, Any], *, min_long_edge: int) -> bool:
         return False
     if record.get("_warningTypes"):
         return False
-    width = _int_value(record.get("_imageWidth"))
-    height = _int_value(record.get("_imageHeight"))
-    if max(width, height) < min_long_edge:
-        return False
-    if width <= height:
-        return False
-    ratio = width / max(height, 1)
-    return 1.15 <= ratio <= 3.0
+    return usable_dimensions(int_value(record.get("_imageWidth")), int_value(record.get("_imageHeight")), min_long_edge)
 
 
 def _has_informative_metadata(record: dict[str, Any]) -> bool:
@@ -317,20 +302,6 @@ def _image_id(record: dict[str, Any]) -> str:
 
 def _iiif_image_url(image_id: str) -> str:
     return f"{VAM_IIIF_BASE}/{image_id}/full/3400,/0/default.jpg"
-
-
-def _short_slug(value: str, max_length: int = 96) -> str:
-    slug = slugify(value)
-    if len(slug) <= max_length:
-        return slug
-    return slug[:max_length].rstrip("-")
-
-
-def _int_value(value: object) -> int:
-    try:
-        return int(str(value))
-    except (TypeError, ValueError):
-        return 0
 
 
 def _detail_record(record: dict[str, Any]) -> dict[str, Any]:

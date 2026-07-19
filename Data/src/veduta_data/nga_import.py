@@ -5,8 +5,8 @@ import urllib.request
 from collections.abc import Iterable
 from typing import Any
 
-from veduta_data.artpaper_import import slugify
-from veduta_data.models import SourceArtwork, SourceCollection, SourceLibrary
+from veduta_data.artpaper_import import int_value, short_slug
+from veduta_data.models import SourceArtwork, SourceCollection, SourceLibrary, orientation_score, usable_dimensions
 
 NGA_COLLECTION_ID = "nga"
 NGA_PACK_ID = 1004
@@ -102,7 +102,7 @@ def import_nga_records(
             break
         title = str(record.get("title") or "Untitled")
         creator = str(record.get("attribution") or "Unknown artist").strip() or "Unknown artist"
-        artwork_id = _short_slug(f"{creator} {title}")
+        artwork_id = short_slug(f"{creator} {title}")
         if artwork_id in used_ids:
             continue
         used_ids.add(artwork_id)
@@ -126,7 +126,6 @@ def import_nga_records(
             short_name="NGA",
             title=NGA_TITLE,
             expected_artwork_count=len(artworks),
-            expected_author_count=len({artwork.creator for artwork in artworks}),
             source_sizes_mb={},
             artworks=artworks,
         )
@@ -134,21 +133,15 @@ def import_nga_records(
 
 
 def score_nga_record(record: dict[str, Any]) -> float:
-    width = _int_value(record.get("width"))
-    height = _int_value(record.get("height"))
+    width = int_value(record.get("width"))
+    height = int_value(record.get("height"))
     creator = str(record.get("attribution") or "").lower()
     title = str(record.get("title") or "").lower()
     medium = str(record.get("medium") or "").lower()
     classification = str(record.get("classification") or "").lower()
     score = max(width, height) / 1000
 
-    if width > height:
-        score += 8
-        ratio = width / max(height, 1)
-        if 1.15 <= ratio <= 2.4:
-            score += 4
-    else:
-        score -= 4
+    score += orientation_score(width, height, 1.15, 2.4)
 
     if any(name in creator for name in FAMOUS_CREATORS):
         score += 8
@@ -164,32 +157,11 @@ def _is_usable_record(record: dict[str, Any], *, min_long_edge: int) -> bool:
         return False
     if not record.get("iiifurl"):
         return False
-    width = _int_value(record.get("width"))
-    height = _int_value(record.get("height"))
-    if max(width, height) < min_long_edge:
-        return False
-    if width <= height:
-        return False
-    ratio = width / max(height, 1)
-    if not (1.15 <= ratio <= 3.0):
+    if not usable_dimensions(int_value(record.get("width")), int_value(record.get("height")), min_long_edge):
         return False
     classification = str(record.get("classification") or "").lower()
     medium = str(record.get("medium") or "").lower()
     return "paint" in classification or "oil" in medium or "print" in classification
-
-
-def _short_slug(value: str, max_length: int = 96) -> str:
-    slug = slugify(value)
-    if len(slug) <= max_length:
-        return slug
-    return slug[:max_length].rstrip("-")
-
-
-def _int_value(value: object) -> int:
-    try:
-        return int(str(value))
-    except (TypeError, ValueError):
-        return 0
 
 
 def _fetch_csv(name: str) -> list[dict[str, str]]:

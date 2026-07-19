@@ -5,8 +5,8 @@ import urllib.request
 from collections.abc import Iterable
 from typing import Any
 
-from veduta_data.artpaper_import import slugify, unique_artwork_id
-from veduta_data.models import SourceArtwork, SourceCollection, SourceLibrary
+from veduta_data.artpaper_import import int_value, slugify, unique_artwork_id
+from veduta_data.models import SourceArtwork, SourceCollection, SourceLibrary, orientation_score, usable_dimensions
 
 CLEVELAND_COLLECTION_ID = "cleveland"
 CLEVELAND_PACK_ID = 1001
@@ -136,7 +136,6 @@ def import_cleveland_records(
         short_name="Cleveland",
         title=CLEVELAND_TITLE,
         expected_artwork_count=len(artworks),
-        expected_author_count=len({artwork.creator for artwork in artworks}),
         source_sizes_mb={},
         artworks=artworks,
     )
@@ -160,19 +159,13 @@ def import_cleveland_api(
 
 def score_cleveland_record(record: dict[str, Any]) -> float:
     image = _best_image(record)
-    width = _int_value(image.get("width"))
-    height = _int_value(image.get("height"))
+    width = int_value(image.get("width"))
+    height = int_value(image.get("height"))
     long_edge = max(width, height)
     short_edge = min(width, height)
     score = long_edge / 1000
 
-    if width > height:
-        ratio = width / max(height, 1)
-        score += 8
-        if 1.25 <= ratio <= 2.1:
-            score += 4
-    else:
-        score -= 4
+    score += orientation_score(width, height, 1.25, 2.1)
 
     if record.get("is_highlight") is True:
         score += 10
@@ -211,14 +204,7 @@ def _is_usable_record(record: dict[str, Any], *, min_long_edge: int) -> bool:
     image = _best_image(record)
     if not image.get("url"):
         return False
-    width = _int_value(image.get("width"))
-    height = _int_value(image.get("height"))
-    if max(width, height) < min_long_edge:
-        return False
-    if width <= height:
-        return False
-    ratio = width / max(height, 1)
-    return 1.15 <= ratio <= 3.0
+    return usable_dimensions(int_value(image.get("width")), int_value(image.get("height")), min_long_edge)
 
 
 def _creator_name(record: dict[str, Any]) -> str:
@@ -238,7 +224,7 @@ def _best_image(record: dict[str, Any]) -> dict[str, Any]:
     if (
         isinstance(full, dict)
         and full.get("url")
-        and _int_value(full.get("filesize")) <= CLEVELAND_MAX_FULL_FILESIZE
+        and int_value(full.get("filesize")) <= CLEVELAND_MAX_FULL_FILESIZE
     ):
         return full
     for key in ("print", "web"):
@@ -259,13 +245,6 @@ def _metadata(record: dict[str, Any]) -> dict[str, object]:
         "date": record.get("creation_date"),
         "medium": record.get("technique") or record.get("medium"),
         "description": record.get("description"),
-        "fullImageFileSize": _int_value((images.get("full") or {}).get("filesize")) if isinstance(images.get("full"), dict) else None,
-        "selectedImageFileSize": _int_value(best.get("filesize")),
+        "fullImageFileSize": int_value((images.get("full") or {}).get("filesize")) if isinstance(images.get("full"), dict) else None,
+        "selectedImageFileSize": int_value(best.get("filesize")),
     }
-
-
-def _int_value(value: object) -> int:
-    try:
-        return int(str(value))
-    except (TypeError, ValueError):
-        return 0

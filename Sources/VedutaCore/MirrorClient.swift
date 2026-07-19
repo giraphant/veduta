@@ -17,16 +17,14 @@ public enum MirrorError: Error, Equatable {
 /// background queue, so blocking here is fine and keeps call sites simple.
 public struct URLSessionMirrorTransport: MirrorTransport {
     private let session: URLSession
-    private let timeout: TimeInterval
 
-    public init(session: URLSession = .shared, timeout: TimeInterval = 60) {
+    public init(session: URLSession = .shared) {
         self.session = session
-        self.timeout = timeout
     }
 
     public func get(_ url: URL) throws -> Data {
         var request = URLRequest(url: url)
-        request.timeoutInterval = timeout
+        request.timeoutInterval = 60
         let semaphore = DispatchSemaphore(value: 0)
         var result: Result<Data, Error> = .failure(MirrorError.noResponse)
         let task = session.dataTask(with: request) { data, response, error in

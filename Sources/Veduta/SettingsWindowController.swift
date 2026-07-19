@@ -27,8 +27,7 @@ enum SettingsCollectionDownloadState: Equatable {
 struct SettingsCollectionOption: Identifiable, Equatable {
     let id: String
     let title: String
-    /// Longer descriptive line (currently the catalog's full title; a curated
-    /// blurb can replace it once the pipeline ships one).
+    /// Longer descriptive line (the catalog's full title).
     let subtitle: String
     let artworkCount: Int
     let coverURL: URL?
@@ -82,20 +81,22 @@ struct SettingsSnapshot: Equatable {
     )
 }
 
-protocol SettingsWindowControllerDelegate: AnyObject {
-    func settingsWindowController(_ controller: SettingsWindowController, didChangeMenuBarIconVisibility isVisible: Bool)
-    func settingsWindowController(_ controller: SettingsWindowController, didChangeDockIconVisibility isVisible: Bool)
-    func settingsWindowController(_ controller: SettingsWindowController, didChangeLaunchAtLogin enabled: Bool)
-    func settingsWindowController(_ controller: SettingsWindowController, didChangeAutomaticCacheCleanup enabled: Bool)
-    func settingsWindowControllerDidRequestCleanWallpaperCache(_ controller: SettingsWindowController)
-    func settingsWindowController(_ controller: SettingsWindowController, didChangeRotationInterval seconds: TimeInterval?)
-    func settingsWindowController(_ controller: SettingsWindowController, didSetCollection collectionID: String, isEnabled: Bool)
-    func settingsWindowController(_ controller: SettingsWindowController, didRequestDownloadCollection collectionID: String)
-    func settingsWindowController(_ controller: SettingsWindowController, didRequestCancelDownloadCollection collectionID: String)
-    func settingsWindowController(_ controller: SettingsWindowController, didSetArtworkKind kind: ArtworkKind, isEnabled: Bool)
-    func settingsWindowControllerDidRequestNextWallpaper(_ controller: SettingsWindowController)
-    func settingsWindowControllerDidRequestOpenLibraryFolder(_ controller: SettingsWindowController)
-    func settingsWindowControllerDidRequestQuit(_ controller: SettingsWindowController)
+/// The app-side handlers behind the Settings UI, wired up once by AppDelegate.
+/// Default no-ops let the controller exist before wiring.
+struct SettingsActions {
+    var setMenuBarIconVisible: (Bool) -> Void = { _ in }
+    var setDockIconVisible: (Bool) -> Void = { _ in }
+    var setLaunchAtLogin: (Bool) -> Void = { _ in }
+    var setAutomaticCacheCleanup: (Bool) -> Void = { _ in }
+    var cleanWallpaperCache: () -> Void = {}
+    var setRotationInterval: (TimeInterval?) -> Void = { _ in }
+    var setCollectionEnabled: (String, Bool) -> Void = { _, _ in }
+    var downloadCollection: (String) -> Void = { _ in }
+    var cancelCollectionDownload: (String) -> Void = { _ in }
+    var setArtworkKindEnabled: (ArtworkKind, Bool) -> Void = { _, _ in }
+    var nextWallpaper: () -> Void = {}
+    var openLibraryFolder: () -> Void = {}
+    var quit: () -> Void = {}
 }
 
 private enum SettingsPane: String, CaseIterable, Identifiable, Hashable {
@@ -132,10 +133,9 @@ private enum SettingsPane: String, CaseIterable, Identifiable, Hashable {
 }
 
 final class SettingsWindowController: NSWindowController {
-    weak var delegate: SettingsWindowControllerDelegate?
+    var actions = SettingsActions()
 
     private var snapshot = SettingsSnapshot.empty
-    private var selectedPane = SettingsPane.wallpaper
     private lazy var hostingController = NSHostingController(rootView: makeView())
 
     init() {
@@ -172,122 +172,17 @@ final class SettingsWindowController: NSWindowController {
     }
 
     private func makeView() -> SettingsView {
-        SettingsView(
-            selectedPane: selectedPane,
-            snapshot: snapshot,
-            onPaneChanged: { [weak self] pane in
-                self?.selectedPane = pane
-            },
-            onMenuBarChanged: { [weak self] isVisible in
-                guard let self else { return }
-                self.delegate?.settingsWindowController(self, didChangeMenuBarIconVisibility: isVisible)
-            },
-            onDockChanged: { [weak self] isVisible in
-                guard let self else { return }
-                self.delegate?.settingsWindowController(self, didChangeDockIconVisibility: isVisible)
-            },
-            onLaunchAtLoginChanged: { [weak self] enabled in
-                guard let self else { return }
-                self.delegate?.settingsWindowController(self, didChangeLaunchAtLogin: enabled)
-            },
-            onAutomaticCacheCleanupChanged: { [weak self] enabled in
-                guard let self else { return }
-                self.delegate?.settingsWindowController(self, didChangeAutomaticCacheCleanup: enabled)
-            },
-            onCleanWallpaperCache: { [weak self] in
-                guard let self else { return }
-                self.delegate?.settingsWindowControllerDidRequestCleanWallpaperCache(self)
-            },
-            onRotationChanged: { [weak self] seconds in
-                guard let self else { return }
-                self.delegate?.settingsWindowController(self, didChangeRotationInterval: seconds)
-            },
-            onCollectionChanged: { [weak self] collectionID, isEnabled in
-                guard let self else { return }
-                self.delegate?.settingsWindowController(self, didSetCollection: collectionID, isEnabled: isEnabled)
-            },
-            onDownloadCollection: { [weak self] collectionID in
-                guard let self else { return }
-                self.delegate?.settingsWindowController(self, didRequestDownloadCollection: collectionID)
-            },
-            onCancelDownloadCollection: { [weak self] collectionID in
-                guard let self else { return }
-                self.delegate?.settingsWindowController(self, didRequestCancelDownloadCollection: collectionID)
-            },
-            onArtworkKindChanged: { [weak self] kind, isEnabled in
-                guard let self else { return }
-                self.delegate?.settingsWindowController(self, didSetArtworkKind: kind, isEnabled: isEnabled)
-            },
-            onNextWallpaper: { [weak self] in
-                guard let self else { return }
-                self.delegate?.settingsWindowControllerDidRequestNextWallpaper(self)
-            },
-            onOpenLibraryFolder: { [weak self] in
-                guard let self else { return }
-                self.delegate?.settingsWindowControllerDidRequestOpenLibraryFolder(self)
-            },
-            onQuit: { [weak self] in
-                guard let self else { return }
-                self.delegate?.settingsWindowControllerDidRequestQuit(self)
-            }
-        )
+        SettingsView(snapshot: snapshot, actions: actions)
     }
 }
 
 private struct SettingsView: View {
     let snapshot: SettingsSnapshot
-    let onPaneChanged: (SettingsPane) -> Void
-    let onMenuBarChanged: (Bool) -> Void
-    let onDockChanged: (Bool) -> Void
-    let onLaunchAtLoginChanged: (Bool) -> Void
-    let onAutomaticCacheCleanupChanged: (Bool) -> Void
-    let onCleanWallpaperCache: () -> Void
-    let onRotationChanged: (TimeInterval?) -> Void
-    let onCollectionChanged: (String, Bool) -> Void
-    let onDownloadCollection: (String) -> Void
-    let onCancelDownloadCollection: (String) -> Void
-    let onArtworkKindChanged: (ArtworkKind, Bool) -> Void
-    let onNextWallpaper: () -> Void
-    let onOpenLibraryFolder: () -> Void
-    let onQuit: () -> Void
+    let actions: SettingsActions
 
-    @State private var selectedPane: SettingsPane?
-
-    init(
-        selectedPane: SettingsPane,
-        snapshot: SettingsSnapshot,
-        onPaneChanged: @escaping (SettingsPane) -> Void,
-        onMenuBarChanged: @escaping (Bool) -> Void,
-        onDockChanged: @escaping (Bool) -> Void,
-        onLaunchAtLoginChanged: @escaping (Bool) -> Void,
-        onAutomaticCacheCleanupChanged: @escaping (Bool) -> Void,
-        onCleanWallpaperCache: @escaping () -> Void,
-        onRotationChanged: @escaping (TimeInterval?) -> Void,
-        onCollectionChanged: @escaping (String, Bool) -> Void,
-        onDownloadCollection: @escaping (String) -> Void,
-        onCancelDownloadCollection: @escaping (String) -> Void,
-        onArtworkKindChanged: @escaping (ArtworkKind, Bool) -> Void,
-        onNextWallpaper: @escaping () -> Void,
-        onOpenLibraryFolder: @escaping () -> Void,
-        onQuit: @escaping () -> Void
-    ) {
-        self.snapshot = snapshot
-        self.onPaneChanged = onPaneChanged
-        self.onMenuBarChanged = onMenuBarChanged
-        self.onDockChanged = onDockChanged
-        self.onLaunchAtLoginChanged = onLaunchAtLoginChanged
-        self.onAutomaticCacheCleanupChanged = onAutomaticCacheCleanupChanged
-        self.onCleanWallpaperCache = onCleanWallpaperCache
-        self.onRotationChanged = onRotationChanged
-        self.onCollectionChanged = onCollectionChanged
-        self.onDownloadCollection = onDownloadCollection
-        self.onCancelDownloadCollection = onCancelDownloadCollection
-        self.onArtworkKindChanged = onArtworkKindChanged
-        self.onNextWallpaper = onNextWallpaper
-        self.onOpenLibraryFolder = onOpenLibraryFolder
-        self.onQuit = onQuit
-        _selectedPane = State(initialValue: selectedPane)
-    }
+    // Survives rootView replacement on snapshot updates, so the selected pane
+    // sticks without round-tripping through the window controller.
+    @State private var selectedPane: SettingsPane? = .wallpaper
 
     var body: some View {
         NavigationSplitView {
@@ -300,11 +195,6 @@ private struct SettingsView: View {
         } detail: {
             detailView
                 .navigationTitle((selectedPane ?? .wallpaper).title)
-        }
-        .onChange(of: selectedPane) { pane in
-            if let pane {
-                onPaneChanged(pane)
-            }
         }
     }
 
@@ -332,7 +222,7 @@ private struct SettingsView: View {
                 Section("Startup") {
                     Toggle("Open Veduta at login", isOn: Binding(
                         get: { snapshot.launchAtLogin },
-                        set: { value in onLaunchAtLoginChanged(value) }
+                        set: { value in actions.setLaunchAtLogin(value) }
                     ))
                 }
             }
@@ -340,12 +230,12 @@ private struct SettingsView: View {
             Section("App Visibility") {
                 Toggle("Show menu bar icon", isOn: Binding(
                     get: { snapshot.showMenuBarIcon },
-                    set: { value in onMenuBarChanged(value) }
+                    set: { value in actions.setMenuBarIconVisible(value) }
                 ))
 
                 Toggle("Show Dock icon on next launch", isOn: Binding(
                     get: { snapshot.showDockIcon },
-                    set: { value in onDockChanged(value) }
+                    set: { value in actions.setDockIconVisible(value) }
                 ))
             }
 
@@ -357,14 +247,14 @@ private struct SettingsView: View {
 
                 Toggle("Automatically trim the cache", isOn: Binding(
                     get: { snapshot.automaticCacheCleanupEnabled },
-                    set: { value in onAutomaticCacheCleanupChanged(value) }
+                    set: { value in actions.setAutomaticCacheCleanup(value) }
                 ))
 
                 Text("macOS keeps a large, ever-growing cache of decoded wallpapers and never clears it on its own. When this is on, Veduta keeps the most recent renders and removes older ones once the cache passes 5 GB. Deleted files are rebuilt by macOS as needed.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
 
-                Button("Clean Up Now", action: onCleanWallpaperCache)
+                Button("Clean Up Now", action: actions.cleanWallpaperCache)
             }
 
             Section("Recovery") {
@@ -407,7 +297,7 @@ private struct SettingsView: View {
                     get: { SettingsRotationOption(title: "", seconds: snapshot.rotationIntervalSeconds).id },
                     set: { value in
                         guard let option = snapshot.rotationOptions.first(where: { $0.id == value }) else { return }
-                        onRotationChanged(option.seconds)
+                        actions.setRotationInterval(option.seconds)
                     }
                 )) {
                     ForEach(snapshot.rotationOptions) { option in
@@ -418,7 +308,7 @@ private struct SettingsView: View {
             }
 
             Section("Actions") {
-                Button("Next Wallpaper", action: onNextWallpaper)
+                Button("Next Wallpaper", action: actions.nextWallpaper)
                     .keyboardShortcut("n")
             }
         }
@@ -522,7 +412,7 @@ private struct SettingsView: View {
         let isLastEnabled = collection.isEnabled && !collection.isToggleEnabled
         Toggle("", isOn: Binding(
             get: { collection.isEnabled },
-            set: { value in onCollectionChanged(collection.id, value) }
+            set: { value in actions.setCollectionEnabled(collection.id, value) }
         ))
         .toggleStyle(.switch)
         .labelsHidden()
@@ -543,7 +433,7 @@ private struct SettingsView: View {
                 .help("Every image in this collection is on disk")
         case let .downloadable(remaining):
             Button {
-                onDownloadCollection(collection.id)
+                actions.downloadCollection(collection.id)
             } label: {
                 Label("Download \(remaining)", systemImage: "arrow.down.circle")
                     .font(.caption)
@@ -559,7 +449,7 @@ private struct SettingsView: View {
                     .font(.caption.monospacedDigit())
                     .foregroundStyle(.secondary)
                 Button {
-                    onCancelDownloadCollection(collection.id)
+                    actions.cancelCollectionDownload(collection.id)
                 } label: {
                     Image(systemName: "stop.circle")
                 }
@@ -588,7 +478,7 @@ private struct SettingsView: View {
                         get: { kind.isEnabled },
                         set: { value in
                             guard let artworkKind = ArtworkKind(rawValue: kind.id) else { return }
-                            onArtworkKindChanged(artworkKind, value)
+                            actions.setArtworkKindEnabled(artworkKind, value)
                         }
                     ))
                     .disabled(!kind.isToggleEnabled)
@@ -623,7 +513,7 @@ private struct SettingsView: View {
             }
 
             Section("Actions") {
-                Button("Open Library Folder", action: onOpenLibraryFolder)
+                Button("Open Library Folder", action: actions.openLibraryFolder)
             }
         }
         .formStyle(.grouped)
@@ -641,8 +531,8 @@ private struct SettingsView: View {
             }
 
             Section("Actions") {
-                Button("Open Library Folder", action: onOpenLibraryFolder)
-                Button("Quit Veduta", action: onQuit)
+                Button("Open Library Folder", action: actions.openLibraryFolder)
+                Button("Quit Veduta", action: actions.quit)
             }
         }
         .formStyle(.grouped)

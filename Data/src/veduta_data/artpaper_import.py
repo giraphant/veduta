@@ -15,6 +15,20 @@ def slugify(value: str) -> str:
     return replaced.strip("-") or "untitled"
 
 
+def short_slug(value: str, max_length: int = 96) -> str:
+    slug = slugify(value)
+    if len(slug) <= max_length:
+        return slug
+    return slug[:max_length].rstrip("-")
+
+
+def int_value(value: object) -> int:
+    try:
+        return int(str(value))
+    except (TypeError, ValueError):
+        return 0
+
+
 def https_url(value: str) -> str:
     parsed = urlparse(value)
     if parsed.scheme == "http":
@@ -80,7 +94,6 @@ def import_artpaper_bundle(app_path: Path) -> SourceLibrary:
             short_name=short_name,
             title=str(package["name"]),
             expected_artwork_count=int(package.get("objects") or len(artworks)),
-            expected_author_count=int(package.get("authors") or 0),
             source_sizes_mb={key: int(value) for key, value in dict(package.get("sizes") or {}).items()},
             artworks=artworks,
         ))

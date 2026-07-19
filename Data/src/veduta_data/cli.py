@@ -15,7 +15,15 @@ from veduta_data.google_arts_dezoom import dezoomify_google_arts
 from veduta_data.getty_import import import_getty_api
 from veduta_data.harvard_import import import_harvard_api
 from veduta_data.installed_packs import default_artpaper_image_root, import_installed_pack_images
-from veduta_data.library_writer import update_wallpaper_metadata, upsert_metadata_collections, write_json, write_metadata_library
+from veduta_data.library_writer import (
+    load_catalog,
+    load_collection,
+    selected_collections,
+    update_wallpaper_metadata,
+    upsert_metadata_collections,
+    write_json,
+    write_metadata_library,
+)
 from veduta_data.met_import import import_met_api
 from veduta_data.nga_import import import_nga_api
 from veduta_data.smithsonian_import import import_smithsonian_api
@@ -35,56 +43,7 @@ def import_metadata(args: argparse.Namespace) -> int:
     return 0
 
 
-def import_cleveland(args: argparse.Namespace) -> int:
-    library = import_cleveland_api(
-        fetch_limit=int(args.fetch_limit),
-        keep_limit=int(args.limit),
-        min_long_edge=int(args.min_long_edge),
-        highlights_only=not bool(args.include_all_open_access),
-    )
-    upsert_metadata_collections(library, Path(args.library_root).expanduser())
-    total = sum(len(collection.artworks) for collection in library.collections)
-    print(f"Imported Cleveland Museum of Art collection with {total} artworks into {args.library_root}")
-    return 0
-
-
-def import_chicago_api_command(args: argparse.Namespace) -> int:
-    library_root = Path(args.library_root).expanduser()
-    library = import_chicago_api(
-        fetch_limit=int(args.fetch_limit),
-        keep_limit=int(args.limit),
-        min_long_edge=int(args.min_long_edge),
-    )
-    remove_legacy_collection(library_root, "chicago-api")
-    upsert_metadata_collections(library, library_root)
-    total = sum(len(collection.artworks) for collection in library.collections)
-    print(f"Imported Art Institute of Chicago collection with {total} artworks into {args.library_root}")
-    return 0
-
-
-def import_met(args: argparse.Namespace) -> int:
-    library_root = Path(args.library_root).expanduser()
-    library = import_met_api(fetch_limit=int(args.fetch_limit), keep_limit=int(args.limit))
-    upsert_metadata_collections(library, library_root)
-    total = sum(len(collection.artworks) for collection in library.collections)
-    print(f"Imported Metropolitan Museum of Art collection with {total} artworks into {args.library_root}")
-    return 0
-
-
-def import_nga(args: argparse.Namespace) -> int:
-    library_root = Path(args.library_root).expanduser()
-    library = import_nga_api(
-        fetch_limit=int(args.fetch_limit),
-        keep_limit=int(args.limit),
-        min_long_edge=int(args.min_long_edge),
-    )
-    upsert_metadata_collections(library, library_root)
-    total = sum(len(collection.artworks) for collection in library.collections)
-    print(f"Imported National Gallery of Art collection with {total} artworks into {args.library_root}")
-    return 0
-
-
-def import_harvard(args: argparse.Namespace) -> int:
+def _harvard_kwargs(args: argparse.Namespace) -> dict[str, object] | None:
     api_key = str(args.api_key or "").strip()
     if not api_key:
         print(
@@ -92,73 +51,141 @@ def import_harvard(args: argparse.Namespace) -> int:
             "Register at https://harvardartmuseums.org/collections/api",
             file=sys.stderr,
         )
-        return 1
-    library_root = Path(args.library_root).expanduser()
-    library = import_harvard_api(
-        api_key=api_key,
-        fetch_limit=int(args.fetch_limit),
-        keep_limit=int(args.limit),
-        min_long_edge=int(args.min_long_edge),
-    )
-    upsert_metadata_collections(library, library_root)
-    total = sum(len(collection.artworks) for collection in library.collections)
-    print(f"Imported Harvard Art Museums collection with {total} artworks into {args.library_root}")
-    return 0
+        return None
+    return {"api_key": api_key}
 
 
-def import_smithsonian(args: argparse.Namespace) -> int:
-    library_root = Path(args.library_root).expanduser()
-    library = import_smithsonian_api(
-        fetch_limit=int(args.fetch_limit),
-        keep_limit=int(args.limit),
-        min_long_edge=int(args.min_long_edge),
-        max_files=int(args.max_files),
-    )
-    upsert_metadata_collections(library, library_root)
-    total = sum(len(collection.artworks) for collection in library.collections)
-    print(f"Imported Smithsonian American Art Museum collection with {total} artworks into {args.library_root}")
-    return 0
-
-
-def import_vam(args: argparse.Namespace) -> int:
-    library_root = Path(args.library_root).expanduser()
+def _vam_kwargs(args: argparse.Namespace) -> dict[str, object]:
     max_per_creator = int(args.max_per_creator)
-    library = import_vam_api(
-        fetch_limit=int(args.fetch_limit),
-        keep_limit=int(args.limit),
-        min_long_edge=int(args.min_long_edge),
-        max_per_creator=max_per_creator if max_per_creator > 0 else None,
-    )
-    upsert_metadata_collections(library, library_root)
-    total = sum(len(collection.artworks) for collection in library.collections)
-    print(f"Imported Victoria and Albert Museum collection with {total} artworks into {args.library_root}")
-    return 0
+    return {"max_per_creator": max_per_creator if max_per_creator > 0 else None}
 
 
-def import_ycba(args: argparse.Namespace) -> int:
+# One entry per museum API import command; all share run_api_import.
+# import_fn is a module-global *name*, resolved at call time so tests can
+# monkeypatch e.g. cli.import_cleveland_api.
+API_IMPORTS = [
+    {
+        "command": "import-cleveland",
+        "label": "Cleveland Museum of Art",
+        "import_fn": "import_cleveland_api",
+        "options": {
+            "--fetch-limit": dict(type=int, default=250),
+            "--limit": dict(type=int, default=100),
+            "--min-long-edge": dict(type=int, default=3840),
+            "--include-all-open-access": dict(action="store_true"),
+        },
+        "extra_kwargs": lambda args: {"highlights_only": not bool(args.include_all_open_access)},
+    },
+    {
+        "command": "import-chicago-api",
+        "label": "Art Institute of Chicago",
+        "import_fn": "import_chicago_api",
+        "legacy_collection_id": "chicago-api",
+        "options": {
+            "--fetch-limit": dict(type=int, default=250),
+            "--limit": dict(type=int, default=100),
+            "--min-long-edge": dict(type=int, default=3000),
+        },
+    },
+    {
+        "command": "import-met",
+        "label": "Metropolitan Museum of Art",
+        "import_fn": "import_met_api",
+        "options": {
+            "--fetch-limit": dict(type=int, default=250),
+            "--limit": dict(type=int, default=100),
+        },
+    },
+    {
+        "command": "import-nga",
+        "label": "National Gallery of Art",
+        "import_fn": "import_nga_api",
+        "options": {
+            "--fetch-limit": dict(type=int, default=250),
+            "--limit": dict(type=int, default=100),
+            "--min-long-edge": dict(type=int, default=3000),
+        },
+    },
+    {
+        "command": "import-harvard",
+        "label": "Harvard Art Museums",
+        "import_fn": "import_harvard_api",
+        "options": {
+            "--api-key": dict(default=os.environ.get("HARVARD_ART_MUSEUMS_API_KEY", "")),
+            "--fetch-limit": dict(type=int, default=250),
+            "--limit": dict(type=int, default=100),
+            "--min-long-edge": dict(type=int, default=3000),
+        },
+        "extra_kwargs": _harvard_kwargs,
+    },
+    {
+        "command": "import-smithsonian",
+        "label": "Smithsonian American Art Museum",
+        "import_fn": "import_smithsonian_api",
+        "options": {
+            "--fetch-limit": dict(type=int, default=500),
+            "--limit": dict(type=int, default=100),
+            "--min-long-edge": dict(type=int, default=3840),
+            "--max-files": dict(type=int, default=256),
+        },
+        "extra_kwargs": lambda args: {"max_files": int(args.max_files)},
+    },
+    {
+        "command": "import-vam",
+        "label": "Victoria and Albert Museum",
+        "import_fn": "import_vam_api",
+        "options": {
+            "--fetch-limit": dict(type=int, default=300),
+            "--limit": dict(type=int, default=100),
+            "--min-long-edge": dict(type=int, default=3840),
+            "--max-per-creator": dict(type=int, default=3, help="0 disables the per-artist cap"),
+        },
+        "extra_kwargs": _vam_kwargs,
+    },
+    {
+        "command": "import-ycba",
+        "label": "Yale Center for British Art",
+        "import_fn": "import_ycba_api",
+        "options": {
+            "--fetch-limit": dict(type=int, default=1000),
+            "--limit": dict(type=int, default=100),
+            "--min-long-edge": dict(type=int, default=2500),
+        },
+    },
+    {
+        "command": "import-getty",
+        "label": "J. Paul Getty Museum",
+        "import_fn": "import_getty_api",
+        "options": {
+            "--fetch-limit": dict(type=int, default=250),
+            "--limit": dict(type=int, default=100),
+            "--min-long-edge": dict(type=int, default=3840),
+            "--start-page": dict(type=int, default=1000),
+        },
+        "extra_kwargs": lambda args: {"start_page": int(args.start_page)},
+    },
+]
+
+
+def run_api_import(args: argparse.Namespace) -> int:
+    spec = args.import_spec
+    kwargs: dict[str, object] = {"fetch_limit": int(args.fetch_limit), "keep_limit": int(args.limit)}
+    if hasattr(args, "min_long_edge"):
+        kwargs["min_long_edge"] = int(args.min_long_edge)
+    extra_kwargs = spec.get("extra_kwargs")
+    if extra_kwargs is not None:
+        extra = extra_kwargs(args)
+        if extra is None:
+            return 1
+        kwargs.update(extra)
     library_root = Path(args.library_root).expanduser()
-    library = import_ycba_api(
-        fetch_limit=int(args.fetch_limit),
-        keep_limit=int(args.limit),
-        min_long_edge=int(args.min_long_edge),
-    )
+    library = globals()[spec["import_fn"]](**kwargs)
+    legacy_id = spec.get("legacy_collection_id")
+    if legacy_id:
+        remove_legacy_collection(library_root, legacy_id)
     upsert_metadata_collections(library, library_root)
     total = sum(len(collection.artworks) for collection in library.collections)
-    print(f"Imported Yale Center for British Art collection with {total} artworks into {args.library_root}")
-    return 0
-
-
-def import_getty(args: argparse.Namespace) -> int:
-    library_root = Path(args.library_root).expanduser()
-    library = import_getty_api(
-        fetch_limit=int(args.fetch_limit),
-        keep_limit=int(args.limit),
-        min_long_edge=int(args.min_long_edge),
-        start_page=int(args.start_page),
-    )
-    upsert_metadata_collections(library, library_root)
-    total = sum(len(collection.artworks) for collection in library.collections)
-    print(f"Imported J. Paul Getty Museum collection with {total} artworks into {args.library_root}")
+    print(f"Imported {spec['label']} collection with {total} artworks into {args.library_root}")
     return 0
 
 
@@ -177,27 +204,6 @@ def remove_legacy_collection(library_root: Path, collection_id: str) -> None:
     catalog_path.write_text(json.dumps(catalog, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     for manifest in removed_manifests:
         (library_root / manifest).unlink(missing_ok=True)
-
-
-def load_catalog(library_root: Path) -> dict[str, object]:
-    return json.loads((library_root / "catalog.json").read_text(encoding="utf-8"))
-
-
-def load_collection(library_root: Path, manifest: str) -> dict[str, object]:
-    return json.loads((library_root / manifest).read_text(encoding="utf-8"))
-
-
-def selected_collections(catalog: dict[str, object], collection_id: str | None, all_collections: bool) -> list[dict[str, object]]:
-    collections = list(catalog["collections"])
-    if all_collections:
-        return collections
-    if collection_id is None:
-        raise SystemExit("Provide --collection <id> or --all")
-    matches = [collection for collection in collections if collection["id"] == collection_id]
-    if not matches:
-        available = ", ".join(str(collection["id"]) for collection in collections)
-        raise SystemExit(f"Unknown collection {collection_id}. Available: {available}")
-    return matches
 
 
 def is_http_url(value: object) -> bool:
@@ -429,72 +435,12 @@ def build_parser() -> argparse.ArgumentParser:
     import_parser.add_argument("--library-root", default=str(default_library_root()))
     import_parser.set_defaults(func=import_metadata)
 
-    cleveland_parser = subcommands.add_parser("import-cleveland")
-    cleveland_parser.add_argument("--library-root", default=str(default_library_root()))
-    cleveland_parser.add_argument("--fetch-limit", type=int, default=250)
-    cleveland_parser.add_argument("--limit", type=int, default=100)
-    cleveland_parser.add_argument("--min-long-edge", type=int, default=3840)
-    cleveland_parser.add_argument("--include-all-open-access", action="store_true")
-    cleveland_parser.set_defaults(func=import_cleveland)
-
-    chicago_parser = subcommands.add_parser("import-chicago-api")
-    chicago_parser.add_argument("--library-root", default=str(default_library_root()))
-    chicago_parser.add_argument("--fetch-limit", type=int, default=250)
-    chicago_parser.add_argument("--limit", type=int, default=100)
-    chicago_parser.add_argument("--min-long-edge", type=int, default=3000)
-    chicago_parser.set_defaults(func=import_chicago_api_command)
-
-    met_parser = subcommands.add_parser("import-met")
-    met_parser.add_argument("--library-root", default=str(default_library_root()))
-    met_parser.add_argument("--fetch-limit", type=int, default=250)
-    met_parser.add_argument("--limit", type=int, default=100)
-    met_parser.set_defaults(func=import_met)
-
-    nga_parser = subcommands.add_parser("import-nga")
-    nga_parser.add_argument("--library-root", default=str(default_library_root()))
-    nga_parser.add_argument("--fetch-limit", type=int, default=250)
-    nga_parser.add_argument("--limit", type=int, default=100)
-    nga_parser.add_argument("--min-long-edge", type=int, default=3000)
-    nga_parser.set_defaults(func=import_nga)
-
-    harvard_parser = subcommands.add_parser("import-harvard")
-    harvard_parser.add_argument("--library-root", default=str(default_library_root()))
-    harvard_parser.add_argument("--api-key", default=os.environ.get("HARVARD_ART_MUSEUMS_API_KEY", ""))
-    harvard_parser.add_argument("--fetch-limit", type=int, default=250)
-    harvard_parser.add_argument("--limit", type=int, default=100)
-    harvard_parser.add_argument("--min-long-edge", type=int, default=3000)
-    harvard_parser.set_defaults(func=import_harvard)
-
-    smithsonian_parser = subcommands.add_parser("import-smithsonian")
-    smithsonian_parser.add_argument("--library-root", default=str(default_library_root()))
-    smithsonian_parser.add_argument("--fetch-limit", type=int, default=500)
-    smithsonian_parser.add_argument("--limit", type=int, default=100)
-    smithsonian_parser.add_argument("--min-long-edge", type=int, default=3840)
-    smithsonian_parser.add_argument("--max-files", type=int, default=256)
-    smithsonian_parser.set_defaults(func=import_smithsonian)
-
-    vam_parser = subcommands.add_parser("import-vam")
-    vam_parser.add_argument("--library-root", default=str(default_library_root()))
-    vam_parser.add_argument("--fetch-limit", type=int, default=300)
-    vam_parser.add_argument("--limit", type=int, default=100)
-    vam_parser.add_argument("--min-long-edge", type=int, default=3840)
-    vam_parser.add_argument("--max-per-creator", type=int, default=3, help="0 disables the per-artist cap")
-    vam_parser.set_defaults(func=import_vam)
-
-    ycba_parser = subcommands.add_parser("import-ycba")
-    ycba_parser.add_argument("--library-root", default=str(default_library_root()))
-    ycba_parser.add_argument("--fetch-limit", type=int, default=1000)
-    ycba_parser.add_argument("--limit", type=int, default=100)
-    ycba_parser.add_argument("--min-long-edge", type=int, default=2500)
-    ycba_parser.set_defaults(func=import_ycba)
-
-    getty_parser = subcommands.add_parser("import-getty")
-    getty_parser.add_argument("--library-root", default=str(default_library_root()))
-    getty_parser.add_argument("--fetch-limit", type=int, default=250)
-    getty_parser.add_argument("--limit", type=int, default=100)
-    getty_parser.add_argument("--min-long-edge", type=int, default=3840)
-    getty_parser.add_argument("--start-page", type=int, default=1000)
-    getty_parser.set_defaults(func=import_getty)
+    for spec in API_IMPORTS:
+        api_parser = subcommands.add_parser(str(spec["command"]))
+        api_parser.add_argument("--library-root", default=str(default_library_root()))
+        for flag, options in spec["options"].items():
+            api_parser.add_argument(flag, **options)
+        api_parser.set_defaults(func=run_api_import, import_spec=spec)
 
     classify_parser = subcommands.add_parser("classify-artwork-kinds")
     classify_parser.add_argument("--library-root", default=str(default_library_root()))

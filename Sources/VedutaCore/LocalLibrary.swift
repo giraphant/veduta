@@ -9,20 +9,20 @@ public final class LocalLibrary {
 
     private let decoder: JSONDecoder
     private let mirror: MirrorClient?
-    private let maxImageBytes: Int
 
-    /// - Parameters:
-    ///   - mirror: when set, missing catalog/manifests/images are fetched from
-    ///     the mirror and written into `root`, so the local-first reads below
-    ///     transparently work for a fresh install with no library built.
-    ///   - maxImageBytes: artworks whose mirrored image exceeds this are not
-    ///     offered for streaming (avoids pulling gigapixel originals just to
-    ///     set a wallpaper); locally present ones are always usable.
-    public init(root: URL, mirror: MirrorClient? = nil, maxImageBytes: Int = 64 * 1024 * 1024) {
+    /// Artworks whose mirrored image exceeds this are not offered for
+    /// streaming (avoids pulling gigapixel originals just to set a
+    /// wallpaper); locally present ones are always usable.
+    private static let maxImageBytes = 64 * 1024 * 1024
+
+    /// - Parameter mirror: when set, missing catalog/manifests/images are
+    ///   fetched from the mirror and written into `root`, so the local-first
+    ///   reads below transparently work for a fresh install with no library
+    ///   built.
+    public init(root: URL, mirror: MirrorClient? = nil) {
         self.root = root
         self.decoder = JSONDecoder()
         self.mirror = mirror
-        self.maxImageBytes = maxImageBytes
     }
 
     public func loadCatalog() throws -> Catalog {
@@ -57,7 +57,6 @@ public final class LocalLibrary {
         public let coverPath: String?
 
         public var hasLocal: Bool { localCount > 0 }
-        public var hasStreamable: Bool { streamableCount > 0 }
     }
 
     /// Upper bound on an artwork's bytes for it to be a cover candidate, so a
@@ -144,23 +143,6 @@ public final class LocalLibrary {
         }
     }
 
-    /// Collections with at least one *available* artwork — local on disk, or
-    /// streamable from the mirror. With no mirror configured this is identical
-    /// to `loadDownloadedCollections`.
-    public func availableCollections(enabledArtworkKinds: Set<ArtworkKind>? = nil) throws -> [CollectionSummary] {
-        let catalog = try loadCatalog()
-        var result: [CollectionSummary] = []
-        for summary in catalog.collections {
-            let collection = try loadCollection(summary)
-            if collection.artworks.contains(where: {
-                isAvailable($0, in: summary.id, enabledArtworkKinds: enabledArtworkKinds)
-            }) {
-                result.append(summary)
-            }
-        }
-        return result
-    }
-
     /// Available artworks paired with the local path where their image lives
     /// (or will live once materialized via `ensureLocalImage`).
     public func availableArtworks(
@@ -173,7 +155,7 @@ public final class LocalLibrary {
             if let collectionIDs, !collectionIDs.contains(summary.id) { continue }
             let collection = try loadCollection(summary)
             for artwork in collection.artworks
-            where isAvailable(artwork, in: summary.id, enabledArtworkKinds: enabledArtworkKinds) {
+            where isAvailable(artwork, enabledArtworkKinds: enabledArtworkKinds) {
                 result.append((artwork, wallpaperURL(for: artwork)))
             }
         }
@@ -204,29 +186,28 @@ public final class LocalLibrary {
 
     private func isAvailable(
         _ artwork: Artwork,
-        in collectionID: String,
         enabledArtworkKinds: Set<ArtworkKind>?
     ) -> Bool {
         guard artwork.images.wallpaper.excluded != true else { return false }
         let localExists = FileManager.default.fileExists(atPath: wallpaperURL(for: artwork).path)
         guard localExists || mirrorEligible(artwork) else { return false }
         guard let enabledArtworkKinds else { return true }
-        let kind = ArtworkKindClassifier.kind(for: artwork, collectionID: collectionID)
-        return enabledArtworkKinds.contains(kind)
+        // ponytail: the pipeline always writes classification.kind; .other only
+        // covers hand-edited or pre-classification manifests.
+        return enabledArtworkKinds.contains(artwork.classification?.kind ?? .other)
     }
 
     private func mirrorEligible(_ artwork: Artwork) -> Bool {
         guard mirror != nil else { return false }
         let wallpaper = artwork.images.wallpaper
         guard wallpaper.removedLocalImage != true else { return false }
-        if let bytes = wallpaper.bytes, bytes > maxImageBytes { return false }
+        if let bytes = wallpaper.bytes, bytes > Self.maxImageBytes { return false }
         return true
     }
 
     private func ensureLocalMetadata(at url: URL, relativePath: String) throws {
         if FileManager.default.fileExists(atPath: url.path) { return }
-        // No mirror: leave the file missing so `decode` throws exactly as it
-        // did before mirror support existed.
+        // No mirror: leave the file missing and let `decode` throw.
         guard let mirror else { return }
         let data = try mirror.fetch(relativePath: relativePath)
         try FileManager.default.createDirectory(
@@ -234,22 +215,6 @@ public final class LocalLibrary {
             withIntermediateDirectories: true
         )
         try data.write(to: url, options: .atomic)
-    }
-
-    public func loadDownloadedCollections(enabledArtworkKinds: Set<ArtworkKind>? = nil) throws -> [CollectionSummary] {
-        let catalog = try loadCatalog()
-        var downloadedCollections: [CollectionSummary] = []
-
-        for summary in catalog.collections {
-            let collection = try loadCollection(summary)
-            if collection.artworks.contains(where: { artwork in
-                isDownloaded(artwork, in: summary.id, enabledArtworkKinds: enabledArtworkKinds)
-            }) {
-                downloadedCollections.append(summary)
-            }
-        }
-
-        return downloadedCollections
     }
 
     public func loadDownloadedArtworks(
@@ -267,7 +232,7 @@ public final class LocalLibrary {
             let collection = try loadCollection(summary)
             for artwork in collection.artworks {
                 let url = wallpaperURL(for: artwork)
-                if isDownloaded(artwork, in: summary.id, enabledArtworkKinds: enabledArtworkKinds) {
+                if isDownloaded(artwork, enabledArtworkKinds: enabledArtworkKinds) {
                     downloadedArtworks.append((artwork, url))
                 }
             }
@@ -276,20 +241,16 @@ public final class LocalLibrary {
         return downloadedArtworks
     }
 
-    public func loadAllDownloadedArtworks() throws -> [(Artwork, URL)] {
-        try loadDownloadedArtworks()
-    }
-
     private func isDownloaded(
         _ artwork: Artwork,
-        in collectionID: String,
         enabledArtworkKinds: Set<ArtworkKind>?
     ) -> Bool {
         guard artwork.images.wallpaper.excluded != true else { return false }
         guard FileManager.default.fileExists(atPath: wallpaperURL(for: artwork).path) else { return false }
         guard let enabledArtworkKinds else { return true }
-        let kind = ArtworkKindClassifier.kind(for: artwork, collectionID: collectionID)
-        return enabledArtworkKinds.contains(kind)
+        // ponytail: the pipeline always writes classification.kind; .other only
+        // covers hand-edited or pre-classification manifests.
+        return enabledArtworkKinds.contains(artwork.classification?.kind ?? .other)
     }
 
     private func decode<T: Decodable>(_ type: T.Type, from url: URL) throws -> T {

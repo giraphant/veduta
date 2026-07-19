@@ -4,8 +4,8 @@ from collections.abc import Iterable
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
-from veduta_data.artpaper_import import slugify, unique_artwork_id
-from veduta_data.models import SourceArtwork, SourceCollection, SourceLibrary
+from veduta_data.artpaper_import import int_value, short_slug, unique_artwork_id
+from veduta_data.models import SourceArtwork, SourceCollection, SourceLibrary, orientation_score, usable_dimensions
 
 YCBA_COLLECTION_ID = "ycba"
 YCBA_PACK_ID = 1008
@@ -82,7 +82,7 @@ def import_ycba_records(
         metadata = _metadata(record)
         title = str(metadata.get("title") or _label(record) or "Untitled")
         creator = str(metadata.get("creator") or "Unknown artist")
-        artwork_id = unique_artwork_id(_short_slug(f"{creator} {title}"), used_ids)
+        artwork_id = unique_artwork_id(short_slug(f"{creator} {title}"), used_ids)
         object_id = _object_id(record)
         image_base = _image_service(_best_canvas(record))
         artworks.append(SourceArtwork(
@@ -105,7 +105,6 @@ def import_ycba_records(
             short_name="YCBA",
             title=YCBA_TITLE,
             expected_artwork_count=len(artworks),
-            expected_author_count=len({artwork.creator for artwork in artworks}),
             source_sizes_mb={},
             artworks=artworks,
         )
@@ -114,22 +113,15 @@ def import_ycba_records(
 
 def score_ycba_record(record: dict[str, Any]) -> float:
     canvas = _best_canvas(record)
-    width = _int_value(canvas.get("width"))
-    height = _int_value(canvas.get("height"))
+    width = int_value(canvas.get("width"))
+    height = int_value(canvas.get("height"))
     short_edge = min(width, height)
-    ratio = width / max(height, 1)
     metadata = _metadata(record)
     creator = str(metadata.get("creator") or "").lower()
     title = str(metadata.get("title") or "").lower()
     medium = str(metadata.get("medium") or "").lower()
     score = max(width, height) / 1000
-
-    if width > height:
-        score += 8
-        if 1.2 <= ratio <= 2.2:
-            score += 4
-    else:
-        score -= 4
+    score += orientation_score(width, height, 1.2, 2.2)
 
     if any(name in creator for name in FAMOUS_CREATORS):
         score += 8
@@ -154,14 +146,7 @@ def _is_usable_record(record: dict[str, Any], *, min_long_edge: int) -> bool:
     image_base = _image_service(canvas)
     if not image_base:
         return False
-    width = _int_value(canvas.get("width"))
-    height = _int_value(canvas.get("height"))
-    if max(width, height) < min_long_edge:
-        return False
-    if width <= height:
-        return False
-    ratio = width / max(height, 1)
-    return 1.15 <= ratio <= 3.0
+    return usable_dimensions(int_value(canvas.get("width")), int_value(canvas.get("height")), min_long_edge)
 
 
 def _metadata(record: dict[str, Any]) -> dict[str, object]:
@@ -228,10 +213,10 @@ def _best_canvas(record: dict[str, Any]) -> dict[str, Any]:
             continue
         if (
             _canvas_priority(canvas),
-            _int_value(canvas.get("width")),
+            int_value(canvas.get("width")),
         ) > (
             _canvas_priority(best),
-            _int_value(best.get("width")),
+            int_value(best.get("width")),
         ):
             best = canvas
     return best
@@ -284,17 +269,3 @@ def _language_value(value: object) -> str:
 
 def _object_id(record: dict[str, Any]) -> str:
     return str(record.get("id") or "").rstrip("/").rsplit("/", 1)[-1]
-
-
-def _short_slug(value: str, max_length: int = 96) -> str:
-    slug = slugify(value)
-    if len(slug) <= max_length:
-        return slug
-    return slug[:max_length].rstrip("-")
-
-
-def _int_value(value: object) -> int:
-    try:
-        return int(str(value))
-    except (TypeError, ValueError):
-        return 0

@@ -15,21 +15,6 @@ private final class FakeTransport: MirrorTransport {
 final class MirrorClientTests: XCTestCase {
     private let base = URL(string: "https://mirror.test/")!
 
-    func testCatalogDecodesOptionalMirrorBaseUrl() throws {
-        let withField = """
-        { "collections": [], "mirrorBaseUrl": "https://example.org/" }
-        """
-        let withoutField = """
-        { "collections": [] }
-        """
-        let decoder = JSONDecoder()
-        XCTAssertEqual(
-            try decoder.decode(Catalog.self, from: Data(withField.utf8)).mirrorBaseUrl,
-            "https://example.org/"
-        )
-        XCTAssertNil(try decoder.decode(Catalog.self, from: Data(withoutField.utf8)).mirrorBaseUrl)
-    }
-
     func testDownloadImagePrefersMirrorAndVerifiesChecksum() throws {
         let transport = FakeTransport()
         let imageData = Data("the-real-image".utf8)
@@ -112,8 +97,7 @@ final class MirrorClientTests: XCTestCase {
         try writeLibrary(at: root, localPath: "images/big.jpg", sha256: "x", bytes: 500_000_000)
         let library = LocalLibrary(
             root: root,
-            mirror: MirrorClient(baseURL: base, transport: FakeTransport()),
-            maxImageBytes: 64 * 1024 * 1024
+            mirror: MirrorClient(baseURL: base, transport: FakeTransport())
         )
         XCTAssertTrue(try library.availableArtworks().isEmpty, "gigapixel image should not be offered for streaming")
     }
@@ -157,9 +141,9 @@ final class MirrorClientTests: XCTestCase {
         let essentials = try XCTUnwrap(availability.first { $0.summary.id == "essentials" })
         let berlin = try XCTUnwrap(availability.first { $0.summary.id == "berlin" })
         XCTAssertTrue(essentials.hasLocal)
-        XCTAssertFalse(essentials.hasStreamable)  // its only image is already local
+        XCTAssertEqual(essentials.streamableCount, 0)  // its only image is already local
         XCTAssertFalse(berlin.hasLocal)
-        XCTAssertTrue(berlin.hasStreamable)       // only reachable via mirror
+        XCTAssertTrue(berlin.streamableCount > 0)      // only reachable via mirror
     }
 
     func testPendingDownloadsListsOnlyMissingStreamableArtworks() throws {

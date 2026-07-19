@@ -6,14 +6,14 @@ final class RandomArtworkPickerTests: XCTestCase {
         let artwork = makeArtwork(id: "artwork-1")
         let imageURL = URL(fileURLWithPath: "/tmp/artwork-1.jpg")
 
-        let picked = try RandomArtworkPicker().pick(from: [(artwork, imageURL)])
+        let picked = try RandomArtworkPicker().pick(count: 1, from: [(artwork, imageURL)])[0]
 
         XCTAssertEqual(picked.0.id, artwork.id)
         XCTAssertEqual(picked.1, imageURL)
     }
 
     func testPickerThrowsForEmptyInput() {
-        XCTAssertThrowsError(try RandomArtworkPicker().pick(from: [])) { error in
+        XCTAssertThrowsError(try RandomArtworkPicker().pick(count: 1, from: [])) { error in
             XCTAssertEqual(error as? RandomArtworkPickerError, .emptyLibrary)
         }
     }
@@ -27,8 +27,8 @@ final class RandomArtworkPickerTests: XCTestCase {
         ]
         let picker = RandomArtworkPicker()
 
-        let firstPick = try picker.pick(from: artworks)
-        let secondPick = try picker.pick(from: artworks)
+        let firstPick = try picker.pick(count: 1, from: artworks)[0]
+        let secondPick = try picker.pick(count: 1, from: artworks)[0]
 
         XCTAssertNotEqual(secondPick.0.id, firstPick.0.id)
     }
@@ -63,17 +63,7 @@ final class RandomArtworkPickerTests: XCTestCase {
             id: id,
             title: "A Sunday on La Grande Jatte",
             creator: "Georges Seurat",
-            attribution: "Georges Seurat, public domain",
-            sources: ArtworkSources(
-                canonicalPage: "https://example.com/artworks/\(id)",
-                artistPage: "https://example.com/artists/georges-seurat",
-                upstreamImageBase: "https://images.example.com/\(id)"
-            ),
-            rights: ArtworkRights(
-                work: "Public Domain",
-                reproduction: "CC0",
-                creditLine: "The Metropolitan Museum of Art"
-            ),
+            sources: ArtworkSources(canonicalPage: "https://example.com/artworks/\(id)"),
             images: ArtworkImages(
                 wallpaper: WallpaperImage(
                     localPath: "images/\(id).jpg",
@@ -82,10 +72,12 @@ final class RandomArtworkPickerTests: XCTestCase {
                     height: 2880,
                     bytes: 123456,
                     sha256: "abc123",
-                    downloadedFrom: "https://example.com/image.jpg",
-                    importedFromArtPaperPack: "/Library/Application Support/ArtPaper/Packs/essentials"
+                    lowRes: nil,
+                    excluded: nil,
+                    removedLocalImage: nil
                 )
-            )
+            ),
+            classification: nil
         )
     }
 }
