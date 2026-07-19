@@ -54,10 +54,6 @@ def candidate_image_urls(image_base: str) -> list[str]:
     return [f"{clean_base}={suffix}" for suffix in IMAGE_SUFFIXES]
 
 
-def wallpaper_local_path(collection_id: str, artwork_id: str, image_base: str) -> str:
-    return f"images/{collection_id}/{artwork_id}.jpg"
-
-
 def atomic_write(path: Path, write) -> None:
     """Write via a sibling tempfile + rename; `write` receives the open binary file."""
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -130,7 +126,7 @@ def collection_summary(collection: SourceCollection) -> dict[str, object]:
 def collection_manifest(collection: SourceCollection, generated_at: str) -> dict[str, object]:
     artworks = []
     for artwork in collection.artworks:
-        local_path = wallpaper_local_path(collection.id, artwork.id, artwork.upstream_image_base)
+        local_path = f"images/{collection.id}/{artwork.id}.jpg"
         artwork_manifest = {
             "id": artwork.id,
             "title": artwork.title,

@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from veduta_data.library_writer import update_wallpaper_metadata, wallpaper_local_path, write_json, write_metadata_library
+from veduta_data.library_writer import update_wallpaper_metadata, write_json, write_metadata_library
 from veduta_data.models import SourceArtwork, SourceCollection, SourceLibrary
 
 
@@ -145,24 +145,6 @@ def test_candidate_image_urls_adds_artic_iiif_size_fallbacks():
         "https://www.artic.edu/iiif/2/image-id/full/1200,/0/default.jpg",
         "https://www.artic.edu/iiif/2/image-id/full/843,/0/default.jpg",
     ]
-
-
-def test_wallpaper_local_path_uses_jpg_for_wallpaper_assets():
-    assert wallpaper_local_path(
-        "cleveland",
-        "artwork",
-        "https://openaccess-cdn.clevelandart.org/1964.420/1964.420_full.tif",
-    ) == "images/cleveland/artwork.jpg"
-    assert wallpaper_local_path(
-        "sample",
-        "artwork",
-        "https://example.test/image.png",
-    ) == "images/sample/artwork.jpg"
-    assert wallpaper_local_path(
-        "chicago",
-        "artwork",
-        "https://www.artic.edu/iiif/2/image-id/full/4096,/0/default.jpg",
-    ) == "images/chicago/artwork.jpg"
 
 
 def test_write_json_leaves_existing_file_intact_if_replace_fails(tmp_path, monkeypatch):

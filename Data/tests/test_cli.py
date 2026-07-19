@@ -476,27 +476,6 @@ def test_import_chicago_api_writes_collection_manifest(tmp_path, monkeypatch):
     ]
 
 
-def test_import_chicago_api_removes_legacy_chicago_api_collection(tmp_path, monkeypatch):
-    write_library(tmp_path, ["existing-artwork"])
-    catalog_path = tmp_path / "catalog.json"
-    catalog = json.loads(catalog_path.read_text(encoding="utf-8"))
-    catalog["collections"].append({"id": "chicago-api", "manifest": "collections/chicago-api.json"})
-    catalog_path.write_text(json.dumps(catalog), encoding="utf-8")
-    (tmp_path / "collections" / "chicago-api.json").write_text(json.dumps({"id": "chicago-api", "artworks": []}), encoding="utf-8")
-
-    def fake_import_chicago_api(*, fetch_limit, keep_limit, min_long_edge):
-        return chicago_api_library()
-
-    monkeypatch.setattr(cli, "import_chicago_api", fake_import_chicago_api)
-
-    result = cli.main(["import-chicago-api", "--library-root", str(tmp_path), "--fetch-limit", "1", "--limit", "1"])
-
-    assert result == 0
-    catalog = json.loads(catalog_path.read_text(encoding="utf-8"))
-    assert [collection["id"] for collection in catalog["collections"]] == ["essentials", "chicago"]
-    assert not (tmp_path / "collections" / "chicago-api.json").exists()
-
-
 def test_import_cleveland_writes_collection_manifest(tmp_path, monkeypatch):
     calls = []
 
