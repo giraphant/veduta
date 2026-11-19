@@ -77,4 +77,31 @@ final class WallpaperCacheJanitorTests: XCTestCase {
         XCTAssertEqual(janitor.currentSizeBytes(), 0, "Unsafe paths report no renders")
         XCTAssertTrue(FileManager.default.fileExists(atPath: victim.path), "Files outside the cache are never touched")
     }
+
+    func testStatusReportsAvailableZeroWhenDirectoryMissing() {
+        let missing = cacheDir.appendingPathComponent("missing-subdir")
+        let janitor = WallpaperCacheJanitor(cacheDirectory: missing)
+        XCTAssertEqual(janitor.status(), .available(bytes: 0))
+    }
+
+    func testStatusReportsPermissionDeniedWhenDirectoryUnreadable() throws {
+        _ = try writeRender("a-2560-1600-0-a.bmp", bytes: 1000, ageDays: 1)
+        try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: cacheDir.path)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: cacheDir.path) }
+
+        let janitor = WallpaperCacheJanitor(cacheDirectory: cacheDir)
+        XCTAssertEqual(janitor.status(), .permissionDenied)
+        XCTAssertEqual(janitor.currentSizeBytes(), 0)
+    }
+
+    func testStatusReportsPermissionDeniedWhenSubdirectoryUnreadable() throws {
+        let sub = cacheDir.appendingPathComponent("extension-com.apple.wallpaper.extension.image")
+        try FileManager.default.createDirectory(at: sub, withIntermediateDirectories: true)
+        try Data(count: 1000).write(to: sub.appendingPathComponent("a.bmp"))
+        try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: sub.path)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: sub.path) }
+
+        let janitor = WallpaperCacheJanitor(cacheDirectory: cacheDir)
+        XCTAssertEqual(janitor.status(), .permissionDenied)
+    }
 }

@@ -27,7 +27,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let loginItem = LoginItemService()
     private let picker = RandomArtworkPicker()
     private let cacheJanitor = WallpaperCacheJanitor()
-    private var wallpaperCacheSizeBytes: Int64 = 0
+    private var wallpaperCacheStatus: WallpaperCacheJanitor.Status = .available(bytes: 0)
     private lazy var settingsWindowController: SettingsWindowController = {
         let controller = SettingsWindowController()
         controller.actions = makeSettingsActions()
@@ -524,9 +524,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if shouldPrune {
                 janitor.prune(toMaxBytes: cap)
             }
-            let size = janitor.currentSizeBytes()
+            let status = janitor.status()
             DispatchQueue.main.async {
-                self?.wallpaperCacheSizeBytes = size
+                self?.wallpaperCacheStatus = status
                 self?.updateSettingsWindow()
             }
         }
@@ -552,7 +552,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             launchAtLogin: loginItem.isEnabled,
             launchAtLoginSupported: loginItem.isSupported,
             automaticCacheCleanupEnabled: preferences.automaticCacheCleanupEnabled,
-            wallpaperCacheSizeBytes: wallpaperCacheSizeBytes,
+            wallpaperCacheStatus: wallpaperCacheStatus,
             rotationIntervalSeconds: rotationIntervalSeconds,
             rotationOptions: rotationIntervalOptions.map { SettingsRotationOption(title: $0.title, seconds: $0.seconds) },
             collections: collectionSummaries.map { summary in
@@ -656,6 +656,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             },
             cleanWallpaperCache: { [weak self] in
                 self?.maintainWallpaperCache(prune: true)
+            },
+            openFullDiskAccessSettings: {
+                if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles") {
+                    NSWorkspace.shared.open(url)
+                }
             },
             setRotationInterval: { [weak self] seconds in
                 guard let self else { return }

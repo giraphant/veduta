@@ -49,7 +49,7 @@ struct SettingsSnapshot: Equatable {
     let launchAtLogin: Bool
     let launchAtLoginSupported: Bool
     let automaticCacheCleanupEnabled: Bool
-    let wallpaperCacheSizeBytes: Int64
+    let wallpaperCacheStatus: WallpaperCacheJanitor.Status
     let rotationIntervalSeconds: TimeInterval?
     let rotationOptions: [SettingsRotationOption]
     let collections: [SettingsCollectionOption]
@@ -67,7 +67,7 @@ struct SettingsSnapshot: Equatable {
         launchAtLogin: false,
         launchAtLoginSupported: true,
         automaticCacheCleanupEnabled: false,
-        wallpaperCacheSizeBytes: 0,
+        wallpaperCacheStatus: .available(bytes: 0),
         rotationIntervalSeconds: 30 * 60,
         rotationOptions: [],
         collections: [],
@@ -89,6 +89,7 @@ struct SettingsActions {
     var setLaunchAtLogin: (Bool) -> Void = { _ in }
     var setAutomaticCacheCleanup: (Bool) -> Void = { _ in }
     var cleanWallpaperCache: () -> Void = {}
+    var openFullDiskAccessSettings: () -> Void = {}
     var setRotationInterval: (TimeInterval?) -> Void = { _ in }
     var setCollectionEnabled: (String, Bool) -> Void = { _, _ in }
     var downloadCollection: (String) -> Void = { _ in }
@@ -241,8 +242,14 @@ private struct SettingsView: View {
 
             Section("Storage") {
                 LabeledContent("Wallpaper render cache") {
-                    Text(Self.formatBytes(snapshot.wallpaperCacheSizeBytes))
-                        .monospacedDigit()
+                    switch snapshot.wallpaperCacheStatus {
+                    case let .available(bytes):
+                        Text(Self.formatBytes(bytes))
+                            .monospacedDigit()
+                    case .permissionDenied:
+                        Text("Full Disk Access required")
+                            .foregroundStyle(.orange)
+                    }
                 }
 
                 Toggle("Automatically trim the cache", isOn: Binding(
@@ -250,11 +257,19 @@ private struct SettingsView: View {
                     set: { value in actions.setAutomaticCacheCleanup(value) }
                 ))
 
-                Text("macOS keeps a large, ever-growing cache of decoded wallpapers and never clears it on its own. When this is on, Veduta keeps the most recent renders and removes older ones once the cache passes 5 GB. Deleted files are rebuilt by macOS as needed.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+                if snapshot.wallpaperCacheStatus == .permissionDenied {
+                    Text("macOS blocks access to the wallpaper cache until Veduta is granted Full Disk Access in System Settings. Without it, automatic cleanup cannot run.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
 
-                Button("Clean Up Now", action: actions.cleanWallpaperCache)
+                    Button("Open Full Disk Access Settings", action: actions.openFullDiskAccessSettings)
+                } else {
+                    Text("macOS keeps a large, ever-growing cache of decoded wallpapers and never clears it on its own. When this is on, Veduta keeps the most recent renders and removes older ones once the cache passes 5 GB. Deleted files are rebuilt by macOS as needed.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+
+                    Button("Clean Up Now", action: actions.cleanWallpaperCache)
+                }
             }
 
             Section("Recovery") {
